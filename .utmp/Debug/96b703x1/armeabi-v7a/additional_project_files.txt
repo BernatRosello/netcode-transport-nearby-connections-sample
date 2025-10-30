@@ -1,0 +1,1 @@
+C:\GAME_DEV\Repos\netcode-transport-nearby-connections-sample\Library\PramData\AndroidApplicationController\Cache\com.Bernat.NetcodeTransportNBCsample\gradle-project\unityLibrary\src\main\cpp\FramePacing\UnitySwappyWrapper.h

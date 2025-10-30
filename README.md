@@ -6,7 +6,7 @@ Multipeer Connectivity is a powerful framework provided by Apple that enables se
 
 ## System Requirements
 
-This sample project has been tested and verified for peer-to-peer communication using MultipeerConnectivity across the following platforms:
+This sample project has been tested and verified for peer-to-peer communication using NearbyConnections across the following platforms:
 - iOS 18.0
 - visionOS 2.0
 - macOS 15.0

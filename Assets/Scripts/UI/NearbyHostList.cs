@@ -6,7 +6,7 @@
 using System.Collections.Generic;
 using UnityEngine;
 using Unity.Netcode;
-using Netcode.Transports.MultipeerConnectivity;
+using Netcode.Transports.NearbyConnections;
 
 public class NearbyHostList : MonoBehaviour
 {
@@ -14,7 +14,7 @@ public class NearbyHostList : MonoBehaviour
 
     [SerializeField] private RectTransform _root;
 
-    private MultipeerConnectivityTransport _mpcTransport;
+    private NBCTransport _nbcTransport;
 
     public List<NearbyHostSlot> NearbyHostSlotList => _nearbyHostSlotList;
 
@@ -22,11 +22,11 @@ public class NearbyHostList : MonoBehaviour
 
     private void Start()
     {
-        // Get the reference of the MPC transport
-        _mpcTransport = MultipeerConnectivityTransport.Instance;
+        // Get the reference of the nbc transport
+        _nbcTransport = NBCTransport.Instance;
 
-        _mpcTransport.OnBrowserFoundPeer += OnBrowserFoundPeer;
-        _mpcTransport.OnBrowserLostPeer += OnBrowserLostPeer;
+        _nbcTransport.OnBrowserFoundPeer += OnBrowserFoundPeer;
+        _nbcTransport.OnBrowserLostPeer += OnBrowserLostPeer;
         NetworkManager.Singleton.OnClientConnectedCallback += OnClientConnected;
         UpdateNearbyHostList();
     }
@@ -57,9 +57,9 @@ public class NearbyHostList : MonoBehaviour
         }
         _nearbyHostSlotList.Clear();
 
-        foreach (var nearbyHostKey in _mpcTransport.NearbyHostDict.Keys)
+        foreach (var nearbyHostKey in _nbcTransport.NearbyHostDict.Keys)
         {
-            var hostName = _mpcTransport.NearbyHostDict[nearbyHostKey];
+            var hostName = _nbcTransport.NearbyHostDict[nearbyHostKey];
 
             var nearbyHostSlotInstance = Instantiate(_nearbyHostSlotPrefab);
             nearbyHostSlotInstance.Init(nearbyHostKey, hostName);

@@ -1,0 +1,1 @@
+C:\GAME_DEV\Repos\netcode-transport-nearby-connections-sample\Library\PramData\AndroidApplicationController\Cache\com.Bernat.NetcodeTransportNBCsample\gradle-project\unityLibrary\build\intermediates\cxx\Debug\96b703x1\obj\arm64-v8a

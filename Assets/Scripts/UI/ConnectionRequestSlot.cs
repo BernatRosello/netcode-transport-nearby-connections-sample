@@ -6,7 +6,7 @@
 using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
-using Netcode.Transports.MultipeerConnectivity;
+using Netcode.Transports.NearbyConnections;
 
 public class ConnectionRequestSlot : MonoBehaviour
 {
@@ -19,7 +19,7 @@ public class ConnectionRequestSlot : MonoBehaviour
         _nickname.text = nickname;
         _approveButton.onClick.AddListener(() =>
         {
-            MultipeerConnectivityTransport.Instance.ApproveConnectionRequest(connectionRequestKey);
+            NBCTransport.Instance.ApproveConnectionRequest(connectionRequestKey);
         });
     }
 }

@@ -6,7 +6,7 @@
 using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
-using Netcode.Transports.MultipeerConnectivity;
+using Netcode.Transports.NearbyConnections;
 
 public class NearbyHostSlot : MonoBehaviour
 {
@@ -19,7 +19,7 @@ public class NearbyHostSlot : MonoBehaviour
         _nickname.text = nickname;
         _joinButton.onClick.AddListener(() =>
         {
-            MultipeerConnectivityTransport.Instance.SendConnectionRequest(nearbyHostKey);
+            NBCTransport.Instance.SendConnectionRequest(nearbyHostKey);
         });
     }
 }

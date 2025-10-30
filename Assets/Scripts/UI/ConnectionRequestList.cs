@@ -5,7 +5,7 @@
 
 using System.Collections.Generic;
 using UnityEngine;
-using Netcode.Transports.MultipeerConnectivity;
+using Netcode.Transports.NearbyConnections;
 
 public class ConnectionRequestList : MonoBehaviour
 {
@@ -13,7 +13,7 @@ public class ConnectionRequestList : MonoBehaviour
 
     [SerializeField] private RectTransform _root;
 
-    private MultipeerConnectivityTransport _mpcTransport;
+    private NBCTransport _nbcTransport;
 
     public List<ConnectionRequestSlot> ConnectionRequestSlotList => _connectionRequestSlotList;
 
@@ -21,11 +21,11 @@ public class ConnectionRequestList : MonoBehaviour
 
     private void Start()
     {
-        // Get the reference of the MPC transport
-        _mpcTransport = MultipeerConnectivityTransport.Instance;
+        // Get the reference of the nbc transport
+        _nbcTransport = NBCTransport.Instance;
 
-        _mpcTransport.OnAdvertiserReceivedConnectionRequest += OnAdvertiserReceivedConnectionRequest;
-        _mpcTransport.OnAdvertiserApprovedConnectionRequest += OnAdvertiserApprovedConnectionRequest;
+        _nbcTransport.OnAdvertiserReceivedConnectionRequest += OnAdvertiserReceivedConnectionRequest;
+        _nbcTransport.OnAdvertiserApprovedConnectionRequest += OnAdvertiserApprovedConnectionRequest;
         UpdateConnectionRequestList();
     }
 
@@ -47,9 +47,9 @@ public class ConnectionRequestList : MonoBehaviour
         }
         _connectionRequestSlotList.Clear();
 
-        foreach (var connectionRequestKey in _mpcTransport.PendingConnectionRequestDict.Keys)
+        foreach (var connectionRequestKey in _nbcTransport.PendingConnectionRequestDict.Keys)
         {
-            var senderName = _mpcTransport.PendingConnectionRequestDict[connectionRequestKey];
+            var senderName = _nbcTransport.PendingConnectionRequestDict[connectionRequestKey];
 
             var connectionRequestSlotInstance = Instantiate(_connectionRequestSlotPrefab);
             connectionRequestSlotInstance.Init(connectionRequestKey, senderName);

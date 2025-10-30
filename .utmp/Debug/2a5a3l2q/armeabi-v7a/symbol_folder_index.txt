@@ -1,0 +1,1 @@
+C:\GAME_DEV\Repos\netcode-transport-nearby-connections-sample\Library\Bee\Android\Prj\Mono2x\Gradle\unityLibrary\build\intermediates\cxx\Debug\2a5a3l2q\obj\armeabi-v7a

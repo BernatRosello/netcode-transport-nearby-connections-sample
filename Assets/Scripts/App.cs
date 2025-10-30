@@ -6,7 +6,7 @@
 using System.Collections.Generic;
 using UnityEngine;
 using Unity.Netcode;
-using Netcode.Transports.MultipeerConnectivity;
+using Netcode.Transports.NearbyConnections;
 
 public class App : MonoBehaviour
 {
@@ -85,22 +85,22 @@ public class App : MonoBehaviour
 
     public void StartAdvertising()
     {
-        MultipeerConnectivityTransport.Instance.StartAdvertising();
+        NBCTransport.Instance.StartAdvertising();
     }
 
     public void StopAdvertising()
     {
-        MultipeerConnectivityTransport.Instance.StopAdvertising();
+        NBCTransport.Instance.StopAdvertising();
     }
 
     public void StartBrowsing()
     {
-        MultipeerConnectivityTransport.Instance.StartBrowsing();
+        NBCTransport.Instance.StartBrowsing();
     }
 
     public void StopBrowsing()
     {
-        MultipeerConnectivityTransport.Instance.StopBrowsing();
+        NBCTransport.Instance.StopBrowsing();
     }
 
     public void Shutdown()

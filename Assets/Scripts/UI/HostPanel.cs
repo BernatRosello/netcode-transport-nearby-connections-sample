@@ -6,7 +6,7 @@
 using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
-using Netcode.Transports.MultipeerConnectivity;
+using Netcode.Transports.NearbyConnections;
 
 public class HostPanel : MonoBehaviour
 {
@@ -16,18 +16,18 @@ public class HostPanel : MonoBehaviour
 
     [SerializeField] private Button _stopAdvertisingButton;
 
-    private MultipeerConnectivityTransport _mpcTransport;
+    private NBCTransport _nbcTransport;
 
     private const string ADVERTISING_STATUS_PREFIX = "Advertising Status: ";
 
     private void Start()
     {
-        _mpcTransport = MultipeerConnectivityTransport.Instance;
+        _nbcTransport = NBCTransport.Instance;
     }
 
     private void Update()
     {
-        if (_mpcTransport.IsAdvertising)
+        if (_nbcTransport.IsAdvertising)
         {
             _advertisingStatusText.text = ADVERTISING_STATUS_PREFIX + "Advertising";
             _startAdvertisingButton.interactable = false;

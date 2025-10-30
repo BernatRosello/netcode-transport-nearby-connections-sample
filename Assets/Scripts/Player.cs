@@ -6,7 +6,7 @@
 using System;
 using Unity.Netcode;
 using Unity.Collections;
-using Netcode.Transports.MultipeerConnectivity;
+using Netcode.Transports.NearbyConnections;
 using System.Diagnostics;
 
 public class Player : NetworkBehaviour
@@ -38,7 +38,7 @@ public class Player : NetworkBehaviour
     {
         if (IsOwner)
         {
-            Nickname.Value = MultipeerConnectivityTransport.Instance.Nickname;
+            Nickname.Value = NBCTransport.Instance.Nickname;
         }
 
         OnPlayerSpawned?.Invoke(this);
