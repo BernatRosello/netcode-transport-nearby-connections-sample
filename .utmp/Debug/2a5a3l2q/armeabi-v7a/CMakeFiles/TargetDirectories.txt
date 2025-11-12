@@ -1,5 +1,0 @@
-C:/GAME_DEV/Repos/netcode-transport-nearby-connections-sample/.utmp/Debug/2a5a3l2q/armeabi-v7a/CMakeFiles/edit_cache.dir
-C:/GAME_DEV/Repos/netcode-transport-nearby-connections-sample/.utmp/Debug/2a5a3l2q/armeabi-v7a/CMakeFiles/rebuild_cache.dir
-C:/GAME_DEV/Repos/netcode-transport-nearby-connections-sample/.utmp/Debug/2a5a3l2q/armeabi-v7a/FramePacing/CMakeFiles/swappywrapper.dir
-C:/GAME_DEV/Repos/netcode-transport-nearby-connections-sample/.utmp/Debug/2a5a3l2q/armeabi-v7a/FramePacing/CMakeFiles/edit_cache.dir
-C:/GAME_DEV/Repos/netcode-transport-nearby-connections-sample/.utmp/Debug/2a5a3l2q/armeabi-v7a/FramePacing/CMakeFiles/rebuild_cache.dir

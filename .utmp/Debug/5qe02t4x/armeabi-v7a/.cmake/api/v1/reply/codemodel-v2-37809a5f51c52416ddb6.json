@@ -1,0 +1,87 @@
+{
+	"configurations" : 
+	[
+		{
+			"directories" : 
+			[
+				{
+					"build" : ".",
+					"childIndexes" : 
+					[
+						1
+					],
+					"jsonFile" : "directory-.-Debug-d0094a50bb2071803777.json",
+					"minimumCMakeVersion" : 
+					{
+						"string" : "3.6.0"
+					},
+					"projectIndex" : 0,
+					"source" : "."
+				},
+				{
+					"build" : "FramePacing",
+					"jsonFile" : "directory-FramePacing-Debug-7f9c8865fd027a154c90.json",
+					"minimumCMakeVersion" : 
+					{
+						"string" : "3.4.1"
+					},
+					"parentIndex" : 0,
+					"projectIndex" : 1,
+					"source" : "FramePacing",
+					"targetIndexes" : 
+					[
+						0
+					]
+				}
+			],
+			"name" : "Debug",
+			"projects" : 
+			[
+				{
+					"childIndexes" : 
+					[
+						1
+					],
+					"directoryIndexes" : 
+					[
+						0
+					],
+					"name" : "Unity"
+				},
+				{
+					"directoryIndexes" : 
+					[
+						1
+					],
+					"name" : "swappywrapper",
+					"parentIndex" : 0,
+					"targetIndexes" : 
+					[
+						0
+					]
+				}
+			],
+			"targets" : 
+			[
+				{
+					"directoryIndex" : 1,
+					"id" : "swappywrapper::@7e25bd1f32ce224db4e9",
+					"jsonFile" : "target-swappywrapper-Debug-f6cdfd02e80e5c7c26d7.json",
+					"name" : "swappywrapper",
+					"projectIndex" : 1
+				}
+			]
+		}
+	],
+	"kind" : "codemodel",
+	"paths" : 
+	{
+		"build" : "C:/GAME_DEV/Repos/NBC-Sample/.utmp/Debug/5qe02t4x/armeabi-v7a",
+		"source" : "C:/GAME_DEV/Repos/NBC-Sample/Library/PramData/AndroidApplicationController/Cache/com.BernatRosello.NetcodeTransportNBCSample/gradle-project/unityLibrary/src/main/cpp"
+	},
+	"version" : 
+	{
+		"major" : 2,
+		"minor" : 3
+	}
+}

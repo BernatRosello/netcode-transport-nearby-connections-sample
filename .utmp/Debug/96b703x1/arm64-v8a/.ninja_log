@@ -1,5 +1,0 @@
-# ninja log v5
-182	415	7835370841627996	C:/GAME_DEV/Repos/netcode-transport-nearby-connections-sample/Library/PramData/AndroidApplicationController/Cache/com.Bernat.NetcodeTransportNBCsample/gradle-project/unityLibrary/build/intermediates/cxx/Debug/96b703x1/obj/arm64-v8a/libswappywrapper.so	f6e67326cf5c6d0e
-0	181	7835370839592108	FramePacing/CMakeFiles/swappywrapper.dir/UnitySwappyWrapper.cpp.o	a531771860213c7f
-1	186	7835374165178494	FramePacing/CMakeFiles/swappywrapper.dir/UnitySwappyWrapper.cpp.o	a531771860213c7f
-187	326	7835374166513222	C:/GAME_DEV/Repos/netcode-transport-nearby-connections-sample/Library/PramData/AndroidApplicationController/Cache/com.Bernat.NetcodeTransportNBCsample/gradle-project/unityLibrary/build/intermediates/cxx/Debug/96b703x1/obj/arm64-v8a/libswappywrapper.so	f6e67326cf5c6d0e

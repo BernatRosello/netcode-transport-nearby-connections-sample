@@ -1,13 +1,5 @@
 {
-  "scopedRegistries": [
-    {
-      "name": "openupm",
-      "url": "https://package.openupm.com",
-      "scopes": [
-        "org.realitydeslab"
-      ]
-    }
-  ],
+  "scopedRegistries": [],
   "dependencies": {
     "com.unity.ide.visualstudio": "2.0.25",
     "com.unity.mobile.android-logcat": "1.4.6",

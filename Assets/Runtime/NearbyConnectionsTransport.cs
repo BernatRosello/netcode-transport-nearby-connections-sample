@@ -7,6 +7,10 @@ using System.Collections.Generic;
 using UnityEngine;
 using Unity.Netcode;
 
+#if UNITY_ANDROID
+using UnityEngine.Android;
+#endif
+
 namespace Netcode.Transports.NearbyConnections
 {
     public class NBCTransport : NetworkTransport
@@ -14,9 +18,9 @@ namespace Netcode.Transports.NearbyConnections
 #if (UNITY_IOS || UNITY_VISIONOS) && !UNITY_EDITOR
         public const string IMPORT_LIBRARY = "__Internal";
 #elif UNITY_ANDROID //&& !UNITY_EDITOR
-    public const string IMPORT_LIBRARY = "libnc_unity.so";
+    public const string IMPORT_LIBRARY = "nc_unity";
 #else
-    public const string IMPORT_LIBRARY = "nc.so";
+        public const string IMPORT_LIBRARY = "nc";
 #endif
 
         public static NBCTransport Instance => s_instance;
@@ -168,6 +172,8 @@ namespace Netcode.Transports.NearbyConnections
 
         public override void Initialize(NetworkManager networkManager)
         {
+            StartCoroutine(RequestNearbyPermissions());
+
             // Initialize native NC layer
             NBC_Initialize(SessionId);
 
@@ -201,6 +207,31 @@ namespace Netcode.Transports.NearbyConnections
             _nearbyHostDict.Clear();
             _isAdvertising = false;
             _isBrowsing = false;
+        }
+
+        private System.Collections.IEnumerator RequestNearbyPermissions()
+        {
+        #if UNITY_ANDROID && !UNITY_EDITOR
+            string[] permissions = new string[]
+            {
+                "android.permission.ACCESS_FINE_LOCATION",
+                "android.permission.BLUETOOTH_CONNECT",
+                "android.permission.BLUETOOTH_SCAN",
+                "android.permission.BLUETOOTH_ADVERTISE",
+                "android.permission.NEARBY_WIFI_DEVICES"
+            };
+
+            foreach (string perm in permissions)
+            {
+                if (!Permission.HasUserAuthorizedPermission(perm))
+                {
+                    Permission.RequestUserPermission(perm);
+                    // Give the system a tiny delay so dialogs can appear one by one
+                    yield return new WaitForSeconds(0.2f);
+                }
+            }
+        #endif
+            yield break; // harmless no-op in Editor or non-Android
         }
 
         // -------------------------------------------------------------------------------------
@@ -290,7 +321,7 @@ namespace Netcode.Transports.NearbyConnections
         // -------------------------------------------------------------------------------------
         // Unity Events
         // -------------------------------------------------------------------------------------
-        
+
         /// <summary>
         /// Invoked when the browser finds a nearby host peer.
         /// The first parameter is the host peer key in the dict.
