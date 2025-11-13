@@ -30,10 +30,13 @@ public class NearbyBridge {
     }
 
     // Called from native to initialize with Unity activity.
-    public static void initialize(Activity unityActivity) {
+    public static void initialize(Activity unityActivity, const std::string serviceId) {
         sActivity = unityActivity;
         if (sClient == null && sActivity != null) {
             sClient = Nearby.getConnectionsClient(sActivity);
+// DEBUG
+        } else {
+            Log.w(TAG, "Could not fetch Nearby Connections Client: " + sClient != null ? "Because client was already fetched (no need to fetch again)." : "Because the passed Activity is null.");
         }
     }
 
@@ -44,7 +47,7 @@ public class NearbyBridge {
         try {
             Class<?> unityPlayer = Class.forName("com.unity3d.player.UnityPlayer");
             Activity activity = (Activity) unityPlayer.getField("currentActivity").get(null);
-            initialize(activity);
+            initialize(activity, serviceId);
         } catch (Exception e) {
             Log.w(TAG, "Could not locate UnityPlayer.currentActivity: " + e);
         }
@@ -158,6 +161,9 @@ public class NearbyBridge {
         String ep = findEndpointByHash(endpointIntId);
         if (ep != null && sClient != null) {
             sClient.acceptConnection(ep, payloadCallback);
+        } else
+        {
+            Log.w("Failed to accept connection from [" + endpoints[endpointIntId]"]")
         }
     }
 

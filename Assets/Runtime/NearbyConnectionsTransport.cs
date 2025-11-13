@@ -296,6 +296,7 @@ namespace Netcode.Transports.NearbyConnections
         // NGO Transport interface
         // -------------------------------------------------------------------------------------
 
+        // NOT IN USE, TRANSPORT IS PURELY EVENT BASED !!!!
         public override NetworkEvent PollEvent(out ulong transportId, out ArraySegment<byte> payload, out float receiveTime)
         {
             transportId = 0;
