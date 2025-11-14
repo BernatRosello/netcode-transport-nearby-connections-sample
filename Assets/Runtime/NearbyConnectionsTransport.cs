@@ -13,6 +13,18 @@ using UnityEngine.Android;
 
 namespace Netcode.Transports.NearbyConnections
 {
+    public sealed class SessionData
+    {
+        public string name {get;}
+        public string serviceId {get;}
+
+        public SessionData(string _name, string _serviceId)
+        {
+            name = _name;
+            serviceId = _serviceId;
+        }
+    }
+
     public class NBCTransport : NetworkTransport
     {
 #if (UNITY_IOS || UNITY_VISIONOS) && !UNITY_EDITOR
@@ -28,11 +40,15 @@ namespace Netcode.Transports.NearbyConnections
 
         public override ulong ServerClientId => 0;
 
-        [Tooltip("Unique service ID for this Nearby session.")]
-        public string SessionId = "unity-nc";
+        private SessionData _sessionData;
 
-        [Tooltip("This will be the name of your device in the network.")]
-        public string Nickname = "UnityPeer";
+        [SerializeField, Tooltip("Unique service ID for this Nearby service (match on all peers).")]
+        private string configServiceId = "untiy-nc";
+        [SerializeField, Tooltip("This will be the name of your device in the network.")]
+        private string configNickname = "UnityPeer";
+
+        public string ServiceId => _sessionData.serviceId;
+        public string Nickname => _sessionData.name;
 
         [Header("Host Config")]
         public bool AutoAdvertise = true;
@@ -173,9 +189,10 @@ namespace Netcode.Transports.NearbyConnections
         public override void Initialize(NetworkManager networkManager)
         {
             StartCoroutine(RequestNearbyPermissions());
+            _sessionData = new SessionData(configNickname, configServiceId);
 
             // Initialize native NC layer
-            NBC_Initialize(SessionId);
+            NBC_Initialize(_sessionData.name, _sessionData.serviceId);
 
             // Hook native callbacks
             NBC_SetOnPeerFound(OnPeerFoundDelegate);
@@ -205,6 +222,7 @@ namespace Netcode.Transports.NearbyConnections
             NBC_Shutdown();
             _pendingConnectionRequestDict.Clear();
             _nearbyHostDict.Clear();
+            _sessionData = null;
             _isAdvertising = false;
             _isBrowsing = false;
         }
@@ -307,7 +325,7 @@ namespace Netcode.Transports.NearbyConnections
 
         public override void Send(ulong transportId, ArraySegment<byte> data, NetworkDelivery delivery)
         {
-            bool reliable = !(delivery == NetworkDelivery.Unreliable || delivery == NetworkDelivery.UnreliableSequenced);
+            //bool reliable = !(delivery == NetworkDelivery.Unreliable || delivery == NetworkDelivery.UnreliableSequenced);
             NBC_SendBytes((int)transportId, data.Array, data.Count);
         }
 
