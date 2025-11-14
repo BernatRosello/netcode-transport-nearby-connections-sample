@@ -63,12 +63,15 @@ public class NearbyBridge {
     }
 
     // ---------------- discovery / advertising ----------------
-    public static void startDiscovery(String serviceId, ) {
+    public static void startDiscovery(String serviceId, boolean lowPower, int strategy) {
         if (sClient == null) {
             Log.w(TAG, "startDiscovery: client null");
             return;
         }
-        DiscoveryOptions options = new DiscoveryOptions.Builder().setStrategy(Strategy.P2P_STAR).build();
+        DiscoveryOptions options = new DiscoveryOptions.Builder()
+        .setLowPower(lowPower)
+        .setStrategy(IntToStrategy(strategy))
+        .build();
         sClient.startDiscovery(serviceId, endpointDiscoveryCallback, options)
                 .addOnSuccessListener(unused -> Log.d(TAG, "Discovery started"))
                 .addOnFailureListener(e -> Log.e(TAG, "Discovery failed", e));
@@ -95,14 +98,6 @@ public class NearbyBridge {
 
     public static void stopAdvertising() {
         if (sClient != null) sClient.stopAdvertising();
-    }
-
-    public static void sendConnectionRequest() {
-        if (sClient == null) {
-            Log.w(TAG, "sendConnectionRequest: client null");
-            return;
-        }
-        sClient.requestConnection()
     }
 
     // ---------------- connection lifecycle ----------------
@@ -144,30 +139,35 @@ public class NearbyBridge {
     private static final ConnectionLifecycleCallback connectionLifecycleCallback = new ConnectionLifecycleCallback() {
         @Override
         public void onConnectionInitiated(String endpointId, ConnectionInfo info) {
-            int eid = Math.abs(endpointId.hashCode());
-            nativeOnConnectionRequested(eid, info.getEndpointName());
-            // do NOT automatically accept — leave C# to decide. But your adapter previously auto-accepted.
-            // For convenience, accept automatically here: sClient.acceptConnection(endpointId, payloadCallback);
+            nativeOnConnectionInitiated(endpointId, info.getEndpointName(), info.getAuthDigits(), info.getAuthenticationStatus());
         }
 
         @Override
-        public void onConnectionResult(String endpointId, ConnectionResolution result) {
-            int eid = Math.abs(endpointId.hashCode());
-            if (result.getStatus().isSuccess()) {
-                nativeOnConnectionEstablished(eid);
+        public void onConnectionResult(String endpointId, ConnectionResolution resolution) {
+            if (resolution.getStatus().isSuccess()) {
+                nativeOnConnectionEstablished(endpointId);
             } else {
+                // TODO: HANDLE RESOLUTION OF CONNECTION, PERHAPS VERIFICATION ETC.
                 nativeOnConnectionDisconnected(eid);
             }
         }
 
         @Override
         public void onDisconnected(String endpointId) {
-            int eid = Math.abs(endpointId.hashCode());
-            nativeOnConnectionDisconnected(eid);
+            nativeOnConnectionDisconnected(endpointId);
         }
     };
 
     // ---------------- connection operations (called from native) ----------------
+    
+    public static void requestConnection(String name, String endpointId) {
+        if (sClient == null) {
+            Log.w(TAG, "requestConnection: client null");
+            return;
+        }
+        sClient.requestConnection(name, endpointId, connectionLifecycleCallback);
+    }
+
     public static void acceptConnection(int endpointIntId) {
         // we used hashCode() for ID mapping — we need to map back to endpointId string.
         // This simple implementation scans endpoints map to find matching hash. Not ideal for collisions.
@@ -194,13 +194,19 @@ public class NearbyBridge {
         }
     }
 
-    public static void sendBytes(int endpointIntId, byte[] data) {
-        String ep = findEndpointByHash(endpointIntId);
-        if (ep != null && sClient != null) {
-            sClient.sendPayload(ep, Payload.fromBytes(data));
+    public static void sendBytes(String endpointId, byte[] data) {
+        if (endpointId != null && sClient != null) {
+            sClient.sendPayload(endpointId, Payload.fromBytes(data));
         } else {
             Log.w(TAG, "sendBytes: endpoint not found");
         }
+    }
+
+    public static void sendBytes(List<String> endpointIds, byte[] data) {
+        if (endpointIds != null && sClient != null) {
+            sClient.sendPayload(endpointIds, Payload.fromBytes(data));
+        } else {
+            Log.w(TAG, "sendBytes: endpoint not found");
     }
 
     private static Strategy IntToStrategy(int strategyEnumVal) {
