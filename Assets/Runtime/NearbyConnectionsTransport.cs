@@ -82,7 +82,10 @@ namespace Netcode.Transports.NearbyConnections
         public Dictionary<string, EndpointStatus> EndpointStatuses => _endpointStatuses;
         public EndpointStatus LocalEndpointStatus {get; private set;}
 
-        public List<(string id, string name)> GetEndpointsByStatus(params EndpointStatus[] statuses) { return _endpointNames.Where(kvp => statuses.Contains(kvp.Value) ); }
+        public List<(string id, string name)> GetEndpointsByStatus(params EndpointStatus[] statuses)
+        {
+            return _endpointNames.Where(kvp => statuses.Contains(_endpointStatuses[kvp.Key])).Select(kvp => (kvp.Key, kvp.Value)).ToList();
+        }
         public List<(string id, string name)>  ConnectedEndpoints => GetEndpointsByStatus(EndpointStatus.CONNECTED);
         public List<(string id, string name)> FoundEndpoints => GetEndpointsByStatus(EndpointStatus.DISCOVERING, EndpointStatus.ADVERTISING, EndpointStatus.REQUESTED, EndpointStatus.REQUESTING);
         public List<(string id, string name)> PendingRequestEndpoints => GetEndpointsByStatus(EndpointStatus.REQUESTED);
@@ -151,7 +154,7 @@ namespace Netcode.Transports.NearbyConnections
         private static void OnPeerLostDelegate(string endpointId)
         {
             if (s_instance == null) return;
-            string disconnectedName;
+            string disconnectedName = "";
             if (s_instance._endpointNames.ContainsKey(endpointId))
             {
                 disconnectedName = s_instance._endpointNames[endpointId];

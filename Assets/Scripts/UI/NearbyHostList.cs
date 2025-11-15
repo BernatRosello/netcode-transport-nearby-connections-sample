@@ -42,13 +42,10 @@ public class NearbyHostList : MonoBehaviour
         }
         _nearbyHostSlotList.Clear();
 
-        foreach (var nearbyEndpointId in _nbcTransport.NearbyHostDict.Keys)
+        foreach (var endpoint in _nbcTransport.FoundEndpoints)
         {
-            if (_nbcTransport.EndpointStatuses[nearbyEndpointId])
-            var hostName = _nbcTransport.NearbyHostDict[nearbyEndpointId];
-
             var nearbyHostSlotInstance = Instantiate(_nearbyHostSlotPrefab);
-            nearbyHostSlotInstance.Init(nearbyEndpointId, hostName);
+            nearbyHostSlotInstance.Init(endpoint.id, endpoint.name);
             nearbyHostSlotInstance.transform.SetParent(_root, false);
 
             _nearbyHostSlotList.Add(nearbyHostSlotInstance);
