@@ -1,6 +1,7 @@
 // NearbyBridge.java
 package com.bernatrosello.nearbybridge;
 
+import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 
 import com.google.android.gms.nearby.Nearby;
@@ -15,13 +16,12 @@ public class NearbyBridge {
     private static ConnectionsClient sClient;
     
     // Native callbacks implemented in jni_nc_unity.cpp
-    private static native void nativeOnPayloadReceived(String endpointId, byte[] payload)
-    private static native void nativeOnPeerFound(int endpointId, String name);
-    private static native void nativeOnPeerLost(int endpointId);
-    private static native void nativeOnConnectionRequested(int endpointId, String name);
-    private static native void nativeOnConnectionEstablished(int endpointId);
-    private static native void nativeOnConnectionDisconnected(int endpointId);
-    private static native void nativeOnDataReceived(int endpointId, byte[] data);
+    private static native void nativeOnPeerFound(String endpointId, String name);
+    private static native void nativeOnPeerLost(String endpointId);
+    private static native void nativeOnConnectionInitiated(String endpointId, String name, String authDigits, int authStatus);
+    private static native void nativeOnConnectionEstablished(String endpointId);
+    private static native void nativeOnConnectionDisconnected(String endpointId);
+    private static native void nativeOnPayloadReceived(String endpointId, byte[] data);
 
     static {
         // ensure the library name matches the built .so (strip lib prefix and .so)
@@ -62,7 +62,7 @@ public class NearbyBridge {
         }
     }
 
-    // ---------------- discovery / advertising ----------------
+    // ---------------- Method interface ----------------
     public static void startDiscovery(String serviceId, boolean lowPower, int strategy) {
         if (sClient == null) {
             Log.w(TAG, "startDiscovery: client null");
@@ -99,66 +99,6 @@ public class NearbyBridge {
     public static void stopAdvertising() {
         if (sClient != null) sClient.stopAdvertising();
     }
-
-    // ---------------- connection lifecycle ----------------
-    private static final EndpointDiscoveryCallback endpointDiscoveryCallback = new EndpointDiscoveryCallback() {
-        @Override
-        public void onEndpointFound(String endpointId, DiscoveredEndpointInfo info) {
-            endpoints.put(endpointId, info.getEndpointName());
-            // Map endpointId string to an integer id for native/csharp. Simple hash (make deterministic)
-            int eid = Math.abs(endpointId.hashCode());
-            nativeOnPeerFound(eid, info.getEndpointInfo(), info.getEndpointName(), info.getServiceId());
-        }
-        @Override
-        public void onEndpointLost(String endpointId) {
-            int eid = Math.abs(endpointId.hashCode());
-            endpoints.remove(endpointId);
-            nativeOnPeerLost(eid);
-        }
-    };
-
-    private static final PayloadCallback payloadCallback = new PayloadCallback() {
-        @Override
-        public void onPayloadReceived(String endpointId, Payload payload) {
-            if (payload.getType() == Payload.Type.BYTES) {
-                byte[] b = payload.asBytes();
-                int eid = Math.abs(endpointId.hashCode());
-                nativeOnDataReceived(eid, b);
-            } else {
-                // streaming / file payloads can be supported here
-                Log.e("Payload Type:" + payload.getType() + " unsupported by NearbyBridge");
-            }
-        }
-
-        @Override
-        public void onPayloadTransferUpdate(String endpointId, PayloadTransferUpdate update) {
-            // optional: map to progress callback
-        }
-    };
-
-    private static final ConnectionLifecycleCallback connectionLifecycleCallback = new ConnectionLifecycleCallback() {
-        @Override
-        public void onConnectionInitiated(String endpointId, ConnectionInfo info) {
-            nativeOnConnectionInitiated(endpointId, info.getEndpointName(), info.getAuthDigits(), info.getAuthenticationStatus());
-        }
-
-        @Override
-        public void onConnectionResult(String endpointId, ConnectionResolution resolution) {
-            if (resolution.getStatus().isSuccess()) {
-                nativeOnConnectionEstablished(endpointId);
-            } else {
-                // TODO: HANDLE RESOLUTION OF CONNECTION, PERHAPS VERIFICATION ETC.
-                nativeOnConnectionDisconnected(eid);
-            }
-        }
-
-        @Override
-        public void onDisconnected(String endpointId) {
-            nativeOnConnectionDisconnected(endpointId);
-        }
-    };
-
-    // ---------------- connection operations (called from native) ----------------
     
     public static void requestConnection(String name, String endpointId) {
         if (sClient == null) {
@@ -168,29 +108,29 @@ public class NearbyBridge {
         sClient.requestConnection(name, endpointId, connectionLifecycleCallback);
     }
 
-    public static void acceptConnection(int endpointIntId) {
+    public static void acceptConnection(String endpointId) {
         // we used hashCode() for ID mapping — we need to map back to endpointId string.
         // This simple implementation scans endpoints map to find matching hash. Not ideal for collisions.
-        String ep = findEndpointByHash(endpointIntId);
-        if (ep != null && sClient != null) {
-            sClient.acceptConnection(ep, payloadCallback);
+        if (sClient != null) {
+            Log.d("Accepting connection to endpoint["+endpointId+"]");
+            sClient.acceptConnection(endpointId, payloadCallback);
         } else
         {
-            Log.w("Failed to accept connection from [" + endpoints[endpointIntId]"]");
+            Log.w("Failed to accept connection from [" + endpointId+ "]");
         }
     }
 
-    public static void rejectConnection(int endpointIntId) {
-        String ep = findEndpointByHash(endpointIntId);
-        if (ep != null && sClient != null) {
-            sClient.rejectConnection(ep);
+    public static void rejectConnection(String endpointId) {
+        if (sClient != null) {
+            Log.d("Rejecting connection to endpoint["+endpointId+"]");
+            sClient.rejectConnection(endpointId);
         }
     }
 
-    public static void disconnect(int endpointIntId) {
-        String ep = findEndpointByHash(endpointIntId);
-        if (ep != null && sClient != null) {
-            sClient.disconnectFromEndpoint(ep);
+    public static void disconnect(String endpointId) {
+        if (sClient != null) {
+            Log.d("Disconnecting from endpoint["+endpointId+"]");
+            sClient.disconnectFromEndpoint(endpointId);
         }
     }
 
@@ -209,6 +149,88 @@ public class NearbyBridge {
             Log.w(TAG, "sendBytes: endpoint not found");
     }
 
+    // ---------------- Callbacks ----------------
+    private static final EndpointDiscoveryCallback endpointDiscoveryCallback = new EndpointDiscoveryCallback() {
+        @Override
+        public void onEndpointFound(String endpointId, DiscoveredEndpointInfo info) {
+            endpoints.put(endpointId, info.getEndpointName());
+            nativeOnPeerFound(endpointId, info.getEndpointInfo(), info.getEndpointName(), info.getServiceId());
+        }
+        @Override
+        public void onEndpointLost(String endpointId) {
+            endpoints.remove(endpointId);
+            nativeOnPeerLost(endpointId);
+        }
+    };
+
+    private static final PayloadCallback payloadCallback = new PayloadCallback() {
+        @Override
+        public void onPayloadReceived(String endpointId, Payload payload) {
+            Lod.d("Endpoint["+endpointId+"]<= Payload["+ payload.getId() +"]");
+            if (payload.getType() == Payload.Type.BYTES) {
+                byte[] b = payload.asBytes();
+                nativeOnPayloadReceived(endpointId, b);
+            } else {
+                // streaming / file payloads can be supported here
+                Log.e("Payload["+payload.getId()+"] Type:" + payload.getType() + " unsupported by NearbyBridge");
+            }
+        }
+
+        @Override
+        public void onPayloadTransferUpdate(String endpointId, PayloadTransferUpdate payloadUpdate) {
+            Log.d("Endpoint["+endpointId+"]<= Payload[" + payloadUpdate.getPayloadId() + "] progress: " + payloadUpdate.getBytesTransferred() + "/" + payloadUpdate.getTotalBytes());
+            // TODO: map to native progress callback ?
+        }
+    };
+
+    private static final ConnectionLifecycleCallback connectionLifecycleCallback = new ConnectionLifecycleCallback() {
+        @Override
+        public void onBandwidthChanged(String endpointId, BandwidthInfo bandwidthInfo) {
+            Log.d("Bandwith to endpoint[" + endpointId + "] changed to: " + bandwidthInfo.getQuality());
+        }
+        
+        @Override
+        public void onConnectionInitiated(String endpointId, ConnectionInfo info) {
+            // This is where connection negotation starts on both requesting and requested endpoints
+            Log.d("Establishing encrypted channel between local endpoint and endpoint[" + endpointId + "]");
+            new AlertDialog.Builder(context)
+                .setTitle("Accept connection to " + info.getEndpointName())
+                .setMessage("Confirm the code matches on both devices: " + info.getAuthenticationDigits())
+                .setPositiveButton(
+                    "Accept",
+                    (DialogInterface dialog, int which) ->
+                        // The user confirmed, so we can accept the connection.
+                        Nearby.getConnectionsClient(context)
+                            .acceptConnection(endpointId, payloadCallback))
+                .setNegativeButton(
+                    android.R.string.cancel,
+                    (DialogInterface dialog, int which) ->
+                        // The user canceled, so we should reject the connection.
+                        Nearby.getConnectionsClient(context).rejectConnection(endpointId))
+                .setIcon(android.R.drawable.ic_dialog_alert)
+                .show();
+            nativeOnConnectionInitiated(endpointId, info.getEndpointName(), info.getAuthDigits(), info.getAuthenticationStatus());
+        }
+
+        @Override
+        public void onConnectionResult(String endpointId, ConnectionResolution resolution) {
+            if (resolution.getStatus().isSuccess()) {
+                Log.d("Established connection with endpoint[" + endpointId + "]");
+                nativeOnConnectionEstablished(endpointId);
+            } else {
+                // TODO: HANDLE RESOLUTION OF CONNECTION, PERHAPS VERIFICATION ETC.
+                nativeOnConnectionDisconnected(eid);
+            }
+        }
+
+        @Override
+        public void onDisconnected(String endpointId) {
+            nativeOnConnectionDisconnected(endpointId);
+        }
+    };
+
+    // ---------------- Utility Functions ----------------
+    
     private static Strategy IntToStrategy(int strategyEnumVal) {
         switch(strategyEnumVal) {
             case 1:

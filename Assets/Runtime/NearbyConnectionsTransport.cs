@@ -73,43 +73,44 @@ namespace Netcode.Transports.NearbyConnections
         // Native imports (wrappers for nc_unity_adapter.h)
         // -------------------------------------------------------------------------------------
 
-        [DllImport(IMPORT_LIBRARY)] private static extern void NBC_Initialize(string serviceId);
+        [DllImport(IMPORT_LIBRARY)] private static extern void NBC_Initialize();
         [DllImport(IMPORT_LIBRARY)] private static extern void NBC_Shutdown();
 
-        [DllImport(IMPORT_LIBRARY)] private static extern void NBC_StartAdvertising();
+        [DllImport(IMPORT_LIBRARY)] private static extern void NBC_StartAdvertising(string name, string serviceId, int connectionType, bool lowPower, int strategy);
         [DllImport(IMPORT_LIBRARY)] private static extern void NBC_StopAdvertising();
-        [DllImport(IMPORT_LIBRARY)] private static extern void NBC_StartDiscovery();
+        [DllImport(IMPORT_LIBRARY)] private static extern void NBC_StartDiscovery(string servieId, bool lowPower, int strategy);
         [DllImport(IMPORT_LIBRARY)] private static extern void NBC_StopDiscovery();
 
-        [DllImport(IMPORT_LIBRARY)] private static extern void NBC_AcceptConnection(int endpointId);
-        [DllImport(IMPORT_LIBRARY)] private static extern void NBC_RejectConnection(int endpointId);
-        [DllImport(IMPORT_LIBRARY)] private static extern void NBC_Disconnect(int endpointId);
-        [DllImport(IMPORT_LIBRARY)] private static extern void NBC_SendBytes(int endpointId, byte[] data, int len);
+        [DllImport(IMPORT_LIBRARY)] private static extern void NBC_RequestConnection(string name, string endpointId);
+        [DllImport(IMPORT_LIBRARY)] private static extern void NBC_AcceptConnection(string endpointId);
+        [DllImport(IMPORT_LIBRARY)] private static extern void NBC_RejectConnection(string endpointId);
+        [DllImport(IMPORT_LIBRARY)] private static extern void NBC_Disconnect(string endpointId);
+        [DllImport(IMPORT_LIBRARY)] private static extern void NBC_SendBytes(string endpointId, byte[] data, int len);
 
         // Callbacks
         [DllImport(IMPORT_LIBRARY)] private static extern void NBC_SetOnPeerFound(OnPeerFoundCallback cb);
         [DllImport(IMPORT_LIBRARY)] private static extern void NBC_SetOnPeerLost(OnPeerLostCallback cb);
-        [DllImport(IMPORT_LIBRARY)] private static extern void NBC_SetOnConnectionRequested(OnConnectionRequestedCallback cb);
+        [DllImport(IMPORT_LIBRARY)] private static extern void NBC_SetOnConnectionInitiated(OnConnectionInitiatedCallback cb);
         [DllImport(IMPORT_LIBRARY)] private static extern void NBC_SetOnConnectionEstablished(OnConnectionEstablishedCallback cb);
         [DllImport(IMPORT_LIBRARY)] private static extern void NBC_SetOnConnectionDisconnected(OnConnectionDisconnectedCallback cb);
-        [DllImport(IMPORT_LIBRARY)] private static extern void NBC_SetOnDataReceived(OnDataReceivedCallback cb);
+        [DllImport(IMPORT_LIBRARY)] private static extern void NBC_SetOnPayloadReceived(OnPayloadReceivedCallback cb);
 
         // -------------------------------------------------------------------------------------
         // Callback delegate signatures (MUST match C)
         // -------------------------------------------------------------------------------------
-        [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate void OnPeerFoundCallback(int endpointId, string name);
-        [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate void OnPeerLostCallback(int endpointId);
-        [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate void OnConnectionRequestedCallback(int endpointId, string name);
-        [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate void OnConnectionEstablishedCallback(int endpointId);
-        [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate void OnConnectionDisconnectedCallback(int endpointId);
-        [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate void OnDataReceivedCallback(int endpointId, IntPtr data, int len);
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate void OnPeerFoundCallback(string endpointId, string name);
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate void OnPeerLostCallback(string endpointId);
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate void OnConnectionInitiatedCallback(string endpointId, string name, string authDigits, int authStatus);
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate void OnConnectionEstablishedCallback(string endpointId);
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate void OnConnectionDisconnectedCallback(string endpointId);
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate void OnPayloadReceivedCallback(string endpointId, IntPtr data, int len);
 
         // -------------------------------------------------------------------------------------
         // Callback methods invoked by native layer
         // -------------------------------------------------------------------------------------
 
         [AOT.MonoPInvokeCallback(typeof(OnPeerFoundCallback))]
-        private static void OnPeerFoundDelegate(int endpointId, string name)
+        private static void OnPeerFoundDelegate(string endpointId, string name)
         {
             if (s_instance == null) return;
             if (!s_instance._nearbyHostDict.ContainsKey(endpointId))
@@ -122,7 +123,7 @@ namespace Netcode.Transports.NearbyConnections
         }
 
         [AOT.MonoPInvokeCallback(typeof(OnPeerLostCallback))]
-        private static void OnPeerLostDelegate(int endpointId)
+        private static void OnPeerLostDelegate(string endpointId)
         {
             if (s_instance == null) return;
             if (s_instance._nearbyHostDict.ContainsKey(endpointId))
@@ -130,8 +131,8 @@ namespace Netcode.Transports.NearbyConnections
             s_instance.OnBrowserLostPeer?.Invoke(endpointId, "");
         }
 
-        [AOT.MonoPInvokeCallback(typeof(OnConnectionRequestedCallback))]
-        private static void OnConnectionRequestedDelegate(int endpointId, string name)
+        [AOT.MonoPInvokeCallback(typeof(OnConnectionInitiatedCallback))]
+        private static void OnConnectionInitiatedDelegate(string endpointId, string name)
         {
             if (s_instance == null) return;
             if (!s_instance.AutoApproveConnectionRequest)
@@ -143,7 +144,7 @@ namespace Netcode.Transports.NearbyConnections
         }
 
         [AOT.MonoPInvokeCallback(typeof(OnConnectionEstablishedCallback))]
-        private static void OnConnectionEstablishedDelegate(int endpointId)
+        private static void OnConnectionEstablishedDelegate(string endpointId)
         {
             if (s_instance == null) return;
             s_instance._isBrowsing = false;
@@ -153,15 +154,15 @@ namespace Netcode.Transports.NearbyConnections
         }
 
         [AOT.MonoPInvokeCallback(typeof(OnConnectionDisconnectedCallback))]
-        private static void OnConnectionDisconnectedDelegate(int endpointId)
+        private static void OnConnectionDisconnectedDelegate(string endpointId)
         {
             if (s_instance == null) return;
             s_instance.InvokeOnTransportEvent(NetworkEvent.Disconnect, (ulong)endpointId,
                 default, Time.realtimeSinceStartup);
         }
 
-        [AOT.MonoPInvokeCallback(typeof(OnDataReceivedCallback))]
-        private static void OnDataReceivedDelegate(int endpointId, IntPtr dataPtr, int len)
+        [AOT.MonoPInvokeCallback(typeof(OnPayloadReceivedCallback))]
+        private static void OnPayloadReceivedDelegate(string endpointId, IntPtr dataPtr, int len)
         {
             if (s_instance == null) return;
             byte[] data = new byte[len];
@@ -197,10 +198,10 @@ namespace Netcode.Transports.NearbyConnections
             // Hook native callbacks
             NBC_SetOnPeerFound(OnPeerFoundDelegate);
             NBC_SetOnPeerLost(OnPeerLostDelegate);
-            NBC_SetOnConnectionRequested(OnConnectionRequestedDelegate);
+            NBC_SetOnConnectionInitiated(OnConnectionInitiatedDelegate);
             NBC_SetOnConnectionEstablished(OnConnectionEstablishedDelegate);
             NBC_SetOnConnectionDisconnected(OnConnectionDisconnectedDelegate);
-            NBC_SetOnDataReceived(OnDataReceivedDelegate);
+            NBC_SetOnPayloadReceived(OnPayloadReceivedDelegate);
         }
 
         public override bool StartServer()
@@ -297,14 +298,14 @@ namespace Netcode.Transports.NearbyConnections
             }
         }
 
-        public void SendConnectionRequest(int endpointId)
+        public void SendConnectionRequest(string endpointId)
         {
             // For Nearby, just initiate connection
             Debug.Log($"[NBC] Send connection request to {endpointId}");
             NBC_AcceptConnection(endpointId);
         }
 
-        public void ApproveConnectionRequest(int endpointId)
+        public void ApproveConnectionRequest(string endpointId)
         {
             s_instance.OnAdvertiserApprovedConnectionRequest?.Invoke(endpointId);
             NBC_AcceptConnection(endpointId);
