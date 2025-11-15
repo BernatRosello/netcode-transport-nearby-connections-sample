@@ -14,7 +14,7 @@ public class ConnectionRequestSlot : MonoBehaviour
 
     [SerializeField] private Button _approveButton;
 
-    public void Init(int connectionRequestKey, string nickname)
+    public void Init(string connectionRequestKey, string nickname)
     {
         _nickname.text = nickname;
         _approveButton.onClick.AddListener(() =>

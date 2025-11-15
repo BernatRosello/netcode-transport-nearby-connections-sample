@@ -25,24 +25,9 @@ public class NearbyHostList : MonoBehaviour
         // Get the reference of the nbc transport
         _nbcTransport = NBCTransport.Instance;
 
-        _nbcTransport.OnBrowserFoundPeer += OnBrowserFoundPeer;
-        _nbcTransport.OnBrowserLostPeer += OnBrowserLostPeer;
-        NetworkManager.Singleton.OnClientConnectedCallback += OnClientConnected;
-        UpdateNearbyHostList();
-    }
-
-    private void OnBrowserFoundPeer(int _, string hostName)
-    {
-        UpdateNearbyHostList();
-    }
-
-    private void OnBrowserLostPeer(int _, string hostName)
-    {
-        UpdateNearbyHostList();
-    }
-
-    private void OnClientConnected(ulong _)
-    {
+        _nbcTransport.OnBrowserFoundPeer += (string _,string _) => { UpdateNearbyHostList(); } ;
+        _nbcTransport.OnBrowserLostPeer +=  (string _, string _) => { UpdateNearbyHostList(); } ;
+        NetworkManager.Singleton.OnClientConnectedCallback +=  (ulong _) => { UpdateNearbyHostList(); } ;
         UpdateNearbyHostList();
     }
 
@@ -57,12 +42,13 @@ public class NearbyHostList : MonoBehaviour
         }
         _nearbyHostSlotList.Clear();
 
-        foreach (var nearbyHostKey in _nbcTransport.NearbyHostDict.Keys)
+        foreach (var nearbyEndpointId in _nbcTransport.NearbyHostDict.Keys)
         {
-            var hostName = _nbcTransport.NearbyHostDict[nearbyHostKey];
+            if (_nbcTransport.EndpointStatuses[nearbyEndpointId])
+            var hostName = _nbcTransport.NearbyHostDict[nearbyEndpointId];
 
             var nearbyHostSlotInstance = Instantiate(_nearbyHostSlotPrefab);
-            nearbyHostSlotInstance.Init(nearbyHostKey, hostName);
+            nearbyHostSlotInstance.Init(nearbyEndpointId, hostName);
             nearbyHostSlotInstance.transform.SetParent(_root, false);
 
             _nearbyHostSlotList.Add(nearbyHostSlotInstance);

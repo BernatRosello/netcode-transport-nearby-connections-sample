@@ -47,9 +47,9 @@ public class ConnectionRequestList : MonoBehaviour
         }
         _connectionRequestSlotList.Clear();
 
-        foreach (var connectionRequestKey in _nbcTransport.PendingConnectionRequestDict.Keys)
+        foreach (var connectionRequestKey in _nbcTransport.PendingRequestEndpoints.Keys)
         {
-            var senderName = _nbcTransport.PendingConnectionRequestDict[connectionRequestKey];
+            var senderName = _nbcTransport.PendingRequestEndpoints[connectionRequestKey];
 
             var connectionRequestSlotInstance = Instantiate(_connectionRequestSlotPrefab);
             connectionRequestSlotInstance.Init(connectionRequestKey, senderName);

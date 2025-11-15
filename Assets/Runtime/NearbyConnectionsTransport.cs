@@ -4,6 +4,7 @@
 using System;
 using System.Runtime.InteropServices;
 using System.Collections.Generic;
+using System.Linq;
 using UnityEngine;
 using Unity.Netcode;
 
@@ -23,6 +24,17 @@ namespace Netcode.Transports.NearbyConnections
             name = _name;
             serviceId = _serviceId;
         }
+    }
+
+    public enum EndpointStatus
+    {
+        UNINITIALIZED,
+        IDLE,
+        ADVERTISING,
+        DISCOVERING,
+        REQUESTING,
+        REQUESTED,
+        CONNECTED,
     }
 
     public class NBCTransport : NetworkTransport
@@ -51,23 +63,29 @@ namespace Netcode.Transports.NearbyConnections
         public string Nickname => _sessionData.name;
 
         [Header("Host Config")]
-        public bool AutoAdvertise = true;
-        public bool AutoApproveConnectionRequest = true;
+        public bool AutoAdvertise = false;
+        public bool AutoApproveConnectionRequest = false;
 
         [Header("Client Config")]
-        public bool AutoBrowse = true;
-        public bool AutoSendConnectionRequest = true;
+        public bool AutoBrowse = false;
+        public bool AutoSendConnectionRequest = false;
 
         private bool _isAdvertising = false;
         private bool _isBrowsing = false;
-
-        private readonly Dictionary<int, string> _nearbyHostDict = new();
-        private readonly Dictionary<int, string> _pendingConnectionRequestDict = new();
-
-        public Dictionary<int, string> NearbyHostDict => _nearbyHostDict;
-        public Dictionary<int, string> PendingConnectionRequestDict => _pendingConnectionRequestDict;
-        public bool IsAdvertising => _isAdvertising;
         public bool IsBrowsing => _isBrowsing;
+        public bool IsAdvertising => _isAdvertising;
+
+        private readonly Dictionary<string, string> _endpointNames = new();
+        private readonly Dictionary<string, EndpointStatus> _endpointStatuses = new();
+
+        public Dictionary<string, string> EndpointNames => _endpointNames;
+        public Dictionary<string, EndpointStatus> EndpointStatuses => _endpointStatuses;
+        public EndpointStatus LocalEndpointStatus {get; private set;}
+
+        public List<(string id, string name)> GetEndpointsByStatus(params EndpointStatus[] statuses) { return _endpointNames.Where(kvp => statuses.Contains(kvp.Value) ); }
+        public List<(string id, string name)>  ConnectedEndpoints => GetEndpointsByStatus(EndpointStatus.CONNECTED);
+        public List<(string id, string name)> FoundEndpoints => GetEndpointsByStatus(EndpointStatus.DISCOVERING, EndpointStatus.ADVERTISING, EndpointStatus.REQUESTED, EndpointStatus.REQUESTING);
+        public List<(string id, string name)> PendingRequestEndpoints => GetEndpointsByStatus(EndpointStatus.REQUESTED);
 
         // -------------------------------------------------------------------------------------
         // Native imports (wrappers for nc_unity_adapter.h)
@@ -113,10 +131,17 @@ namespace Netcode.Transports.NearbyConnections
         private static void OnPeerFoundDelegate(string endpointId, string name)
         {
             if (s_instance == null) return;
-            if (!s_instance._nearbyHostDict.ContainsKey(endpointId))
-                s_instance._nearbyHostDict.Add(endpointId, name);
+            if (!s_instance._endpointNames.ContainsKey(endpointId))
+                s_instance._endpointNames.Add(endpointId, name);
+            else
+                s_instance._endpointNames[endpointId] = name;
 
-            s_instance.OnBrowserFoundPeer?.Invoke(endpointId, name);
+            if (!s_instance._endpointStatuses.ContainsKey(endpointId))
+                s_instance._endpointStatuses.Add(endpointId, EndpointStatus.ADVERTISING);
+            else
+                s_instance._endpointStatuses[endpointId] = EndpointStatus.ADVERTISING;
+
+            s_instance.OnBrowserFoundPeer?.InvokeOnMainThread(endpointId, name);
 
             if (s_instance.AutoSendConnectionRequest && s_instance._isBrowsing)
                 s_instance.SendConnectionRequest(endpointId);
@@ -126,21 +151,36 @@ namespace Netcode.Transports.NearbyConnections
         private static void OnPeerLostDelegate(string endpointId)
         {
             if (s_instance == null) return;
-            if (s_instance._nearbyHostDict.ContainsKey(endpointId))
-                s_instance._nearbyHostDict.Remove(endpointId);
-            s_instance.OnBrowserLostPeer?.Invoke(endpointId, "");
+            string disconnectedName;
+            if (s_instance._endpointNames.ContainsKey(endpointId))
+            {
+                disconnectedName = s_instance._endpointNames[endpointId];
+                s_instance._endpointNames.Remove(endpointId);
+            }
+            s_instance.OnBrowserLostPeer?.Invoke(endpointId, disconnectedName);
         }
 
         [AOT.MonoPInvokeCallback(typeof(OnConnectionInitiatedCallback))]
-        private static void OnConnectionInitiatedDelegate(string endpointId, string name)
+        private static void OnConnectionInitiatedDelegate(string endpointId, string name, string authDigits, int authStatus)
         {
             if (s_instance == null) return;
-            if (!s_instance.AutoApproveConnectionRequest)
-                s_instance._pendingConnectionRequestDict[endpointId] = name;
-            s_instance.OnAdvertiserReceivedConnectionRequest?.Invoke(endpointId, name);
+            if (LocalEndpointStatus == EndpointStatus.ADVERTISING)
+            {
+                _endpointStatuses[endpointId] = EndpointStatus.REQUESTING;
+                s_instance.OnAdvertiserReceivedConnectionRequest?.InvokeOnMainThread(endpointId, name);
+
+            } else if (LocalEndpointStatus == EndpointStatus.DISCOVERING)
+            {
+                s_instance._endpointStatuses[endpointId] = EndpointStatus.REQUESTED;
+            }
+            Debug.Log("Authdigits: " + authDigits);
 
             if (s_instance.AutoApproveConnectionRequest)
+            {
                 s_instance.ApproveConnectionRequest(endpointId);
+            }
+
+            Debug.Log("AuthDigits: "+authDigits+" AuthStatus: " + authStatus);
         }
 
         [AOT.MonoPInvokeCallback(typeof(OnConnectionEstablishedCallback))]
@@ -187,13 +227,23 @@ namespace Netcode.Transports.NearbyConnections
             }
         }
 
+        public void ConfigureNickname(string nickname)
+        {
+            configNickname = nickname;
+        }
+
+        public void ConfigureServiceId(string serviceId)
+        {
+            configServiceId = configServiceId;
+        }
+
         public override void Initialize(NetworkManager networkManager)
         {
             StartCoroutine(RequestNearbyPermissions());
             _sessionData = new SessionData(configNickname, configServiceId);
 
             // Initialize native NC layer
-            NBC_Initialize(_sessionData.name, _sessionData.serviceId);
+            NBC_Initialize();
 
             // Hook native callbacks
             NBC_SetOnPeerFound(OnPeerFoundDelegate);
@@ -221,8 +271,8 @@ namespace Netcode.Transports.NearbyConnections
         public override void Shutdown()
         {
             NBC_Shutdown();
-            _pendingConnectionRequestDict.Clear();
-            _nearbyHostDict.Clear();
+            _endpointStatuses.Clear();
+            _endpointNames.Clear();
             _sessionData = null;
             _isAdvertising = false;
             _isBrowsing = false;
@@ -261,10 +311,11 @@ namespace Netcode.Transports.NearbyConnections
         {
             if (!_isAdvertising)
             {
-                _pendingConnectionRequestDict.Clear();
+                _endpointStatuses.Clear();
                 Debug.Log("[NBC] StartAdvertising()");
                 NBC_StartAdvertising();
                 _isAdvertising = true;
+                LocalEndpointStatus = EndpointStatus.ADVERTISING;
             }
         }
 
@@ -274,6 +325,9 @@ namespace Netcode.Transports.NearbyConnections
             {
                 NBC_StopAdvertising();
                 _isAdvertising = false;
+                
+                if (LocalEndpointStatus == EndpointStatus.ADVERTISING)
+                    LocalEndpointStatus = EndpointStatus.IDLE;
             }
         }
 
@@ -281,10 +335,11 @@ namespace Netcode.Transports.NearbyConnections
         {
             if (!_isBrowsing)
             {
-                _nearbyHostDict.Clear();
+                _endpointNames.Clear();
                 Debug.Log("[NBC] StartDiscovery()");
                 NBC_StartDiscovery();
                 _isBrowsing = true;
+                LocalEndpointStatus = EndpointStatus.DISCOVERING;
             }
         }
 
@@ -294,7 +349,10 @@ namespace Netcode.Transports.NearbyConnections
             {
                 NBC_StopDiscovery();
                 _isBrowsing = false;
-                _nearbyHostDict.Clear();
+                _endpointNames.Clear();
+                
+                if (LocalEndpointStatus == EndpointStatus.DISCOVERING)
+                    LocalEndpointStatus = EndpointStatus.IDLE;
             }
         }
 
@@ -302,7 +360,9 @@ namespace Netcode.Transports.NearbyConnections
         {
             // For Nearby, just initiate connection
             Debug.Log($"[NBC] Send connection request to {endpointId}");
-            NBC_AcceptConnection(endpointId);
+            NBC_RequestConnection(Nickname, endpointId);
+            _endpointStatuses[endpointId] = EndpointStatus.REQUESTED;
+            LocalEndpointStatus = EndpointStatus.REQUESTING;
         }
 
         public void ApproveConnectionRequest(string endpointId)
@@ -347,14 +407,14 @@ namespace Netcode.Transports.NearbyConnections
         /// The first parameter is the host peer key in the dict.
         /// The second parameter is the name of the host peer.
         /// </summary>
-        public event Action<int, string> OnBrowserFoundPeer;
+        public event Action<string, string> OnBrowserFoundPeer;
 
         /// <summary>
         /// Invoked when the browser loses a nearby host peer.
         /// The first parameter is the host peer key in the dict.
         /// The second parameter is the name of the host peer.
         /// </summary>
-        public event Action<int, string> OnBrowserLostPeer;
+        public event Action<string, string> OnBrowserLostPeer;
 
         /// <summary>
         /// Invoked when the advertiser receives a connection request.

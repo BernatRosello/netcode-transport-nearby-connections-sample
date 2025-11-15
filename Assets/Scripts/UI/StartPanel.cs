@@ -10,9 +10,9 @@ public class StartPanel : MonoBehaviour
 {
     public void OnNicknameChanged(string nickname)
     {
-        NBCTransport.Instance.Nickname = nickname;
+        NBCTransport.Instance.ConfigureNickname(nickname);
 
-        Debug.Log($"Nickname changed to {nickname}");
+        Debug.Log($"Nickname configured to {nickname}");
     }
 
     public void OnAutoAdvertiseToggled(bool value)

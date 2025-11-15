@@ -20,7 +20,7 @@ public class ConnectedPlayerList : MonoBehaviour
 
     private void Start()
     {
-        _app = FindObjectOfType<App>();
+        _app = FindFirstObjectByType<App>();
 
         Player.OnPlayerSpawned += OnPlayerSpawned;
         Player.OnPlayerDespawned += OnPlayerDespawned;

@@ -14,7 +14,7 @@ public class NearbyHostSlot : MonoBehaviour
 
     [SerializeField] private Button _joinButton;
 
-    public void Init(int nearbyHostKey, string nickname)
+    public void Init(string nearbyHostKey, string nickname)
     {
         _nickname.text = nickname;
         _joinButton.onClick.AddListener(() =>
