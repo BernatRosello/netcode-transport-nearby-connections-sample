@@ -8,7 +8,7 @@ using UnityEngine.UI;
 using TMPro;
 using Netcode.Transports.NearbyConnections;
 
-public class NearbyHostSlot : MonoBehaviour
+public class NearbyHostSlot : EndpointGUISlot
 {
     [SerializeField] private TMP_Text _nickname;
 

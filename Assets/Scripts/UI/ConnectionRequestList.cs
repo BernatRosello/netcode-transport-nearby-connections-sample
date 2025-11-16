@@ -6,6 +6,7 @@
 using System.Collections.Generic;
 using UnityEngine;
 using Netcode.Transports.NearbyConnections;
+using Unity.Netcode;
 
 public class ConnectionRequestList : MonoBehaviour
 {
@@ -24,18 +25,9 @@ public class ConnectionRequestList : MonoBehaviour
         // Get the reference of the nbc transport
         _nbcTransport = NBCTransport.Instance;
 
-        _nbcTransport.OnAdvertiserReceivedConnectionRequest += OnAdvertiserReceivedConnectionRequest;
-        _nbcTransport.OnAdvertiserApprovedConnectionRequest += OnAdvertiserApprovedConnectionRequest;
-        UpdateConnectionRequestList();
-    }
-
-    private void OnAdvertiserReceivedConnectionRequest(int _, string senderName)
-    {
-        UpdateConnectionRequestList();
-    }
-
-    private void OnAdvertiserApprovedConnectionRequest(int _)
-    {
+        _nbcTransport.OnLostPeer += (string _, string _) => UpdateConnectionRequestList();
+        _nbcTransport.OnAdvertiserReceivedConnectionRequest += (string _, string _) => UpdateConnectionRequestList();
+        NetworkManager.Singleton.OnClientConnectedCallback += (ulong _) => UpdateConnectionRequestList();
         UpdateConnectionRequestList();
     }
 
@@ -47,10 +39,12 @@ public class ConnectionRequestList : MonoBehaviour
         }
         _connectionRequestSlotList.Clear();
 
+        Debug.Log("Updating Connection Request List");
         foreach (var endpoint in _nbcTransport.PendingRequestEndpoints)
         {
+            Debug.Log("Adding pending request endpoint: " + endpoint.name);
             var connectionRequestSlotInstance = Instantiate(_connectionRequestSlotPrefab);
-            connectionRequestSlotInstance.Init(endpoint.id, endpoint.name);
+            connectionRequestSlotInstance.Init(endpoint.id, endpoint.name, endpoint.authCode);
             connectionRequestSlotInstance.transform.SetParent(_root, false);
 
             _connectionRequestSlotList.Add(connectionRequestSlotInstance);

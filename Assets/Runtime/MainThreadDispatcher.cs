@@ -48,6 +48,11 @@ namespace Netcode.Transports.NearbyConnections
         {
             MainThreadDispatcher.Run(action);
         }
+        
+        public static void InvokeOnMainThread<T1>(this Action<T1> action, T1 a)
+        {
+            MainThreadDispatcher.Run(() => action(a));
+        }
 
         public static void InvokeOnMainThread<T1, T2>(this Action<T1, T2> action, T1 a, T2 b)
         {

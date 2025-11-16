@@ -11,23 +11,25 @@ using Netcode.Transports.NearbyConnections;
 public class NearbyHostList : MonoBehaviour
 {
     [SerializeField] private NearbyHostSlot _nearbyHostSlotPrefab;
+    [SerializeField] private ConnectionRequestSlot _connectionRequestSlotPrefab;
 
     [SerializeField] private RectTransform _root;
 
     private NBCTransport _nbcTransport;
 
-    public List<NearbyHostSlot> NearbyHostSlotList => _nearbyHostSlotList;
+    public List<EndpointGUISlot> NearbyHostSlotList => _nearbyHostSlotList;
 
-    private readonly List<NearbyHostSlot> _nearbyHostSlotList = new();
+    private readonly List<EndpointGUISlot> _nearbyHostSlotList = new();
 
     private void Start()
     {
         // Get the reference of the nbc transport
         _nbcTransport = NBCTransport.Instance;
 
-        _nbcTransport.OnBrowserFoundPeer += (string _,string _) => { UpdateNearbyHostList(); } ;
-        _nbcTransport.OnBrowserLostPeer +=  (string _, string _) => { UpdateNearbyHostList(); } ;
-        NetworkManager.Singleton.OnClientConnectedCallback +=  (ulong _) => { UpdateNearbyHostList(); } ;
+        _nbcTransport.OnBrowserFoundPeer += (string _,string _) => UpdateNearbyHostList() ;
+        _nbcTransport.OnLostPeer +=  (string _, string _) => UpdateNearbyHostList() ;
+        _nbcTransport.OnBrowserSentConnectionRequest += (string _, string _) => UpdateNearbyHostList();
+        NetworkManager.Singleton.OnClientConnectedCallback += (ulong _) => UpdateNearbyHostList();
         UpdateNearbyHostList();
     }
 
@@ -46,6 +48,17 @@ public class NearbyHostList : MonoBehaviour
         {
             var nearbyHostSlotInstance = Instantiate(_nearbyHostSlotPrefab);
             nearbyHostSlotInstance.Init(endpoint.id, endpoint.name);
+            nearbyHostSlotInstance.transform.SetParent(_root, false);
+
+            _nearbyHostSlotList.Add(nearbyHostSlotInstance);
+        }
+
+        Debug.Log("Updating Nearby Host List");
+        foreach (var endpoint in _nbcTransport.PendingRequestEndpoints)
+        {
+            Debug.Log("Adding pending request endpoint: " + endpoint.name);
+            var nearbyHostSlotInstance = Instantiate(_connectionRequestSlotPrefab);
+            nearbyHostSlotInstance.Init(endpoint.id, endpoint.name, endpoint.authCode);
             nearbyHostSlotInstance.transform.SetParent(_root, false);
 
             _nearbyHostSlotList.Add(nearbyHostSlotInstance);

@@ -8,15 +8,17 @@ using UnityEngine.UI;
 using TMPro;
 using Netcode.Transports.NearbyConnections;
 
-public class ConnectionRequestSlot : MonoBehaviour
+public class ConnectionRequestSlot : EndpointGUISlot
 {
     [SerializeField] private TMP_Text _nickname;
+    [SerializeField] private TMP_Text _authCode;
 
     [SerializeField] private Button _approveButton;
 
-    public void Init(string connectionRequestKey, string nickname)
+    public void Init(string connectionRequestKey, string nickname, string authCode)
     {
         _nickname.text = nickname;
+        _authCode.text = authCode;
         _approveButton.onClick.AddListener(() =>
         {
             NBCTransport.Instance.ApproveConnectionRequest(connectionRequestKey);
