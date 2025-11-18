@@ -34,11 +34,13 @@ namespace Netcode.Transports.NearbyConnections
         {
             public string name { get; }
             public string serviceId { get; }
+            public ConnectionStrategy strategy { get; }
 
-            public SessionData(string _name, string _serviceId)
+            public SessionData(string _name, string _serviceId, ConnectionStrategy _strategy)
             {
                 name = _name;
                 serviceId = _serviceId;
+                strategy = _strategy;
             }
         }
 
@@ -193,13 +195,16 @@ namespace Netcode.Transports.NearbyConnections
 
         private SessionData _sessionData;
 
+        [Header("Common Config")]
         [SerializeField, Tooltip("Unique service ID for this Nearby service (match on all peers).")]
-        private string configServiceId = "untiy-nc";
+        private string _configServiceId = "untiy-nc";
         [SerializeField, Tooltip("This will be the name of your device in the network.")]
-        private string configNickname = "UnityPeer";
-
+        private string _configNickname = "UnityPeer";
+        [SerializeField, Tooltip("This will be the connection strategy used in the P2P Nearby network.")]
+        private ConnectionStrategy _configConnectionStrategy = ConnectionStrategy.P2P_STAR;
         public string ServiceId => _sessionData.serviceId;
         public string Nickname => _sessionData.name;
+        public ConnectionStrategy Strategy => _sessionData.strategy;
 
         [Header("Host Config")]
         public bool AutoAdvertise = false;
@@ -257,7 +262,7 @@ namespace Netcode.Transports.NearbyConnections
         [DllImport(IMPORT_LIBRARY)] private static extern void NBC_SendBytes(string endpointId, byte[] data, int len);
 
         // Callbacks
-        [DllImport(IMPORT_LIBRARY)] private static extern void NBC_SetOnPeerFound(OnPeerFoundCallback cb);
+        [DllImport(IMPORT_LIBRARY)] private static extern void NBC_SetOnPeerFound(OnDiscoveryPeerFoundCallback cb);
         [DllImport(IMPORT_LIBRARY)] private static extern void NBC_SetOnPeerLost(OnPeerLostCallback cb);
         [DllImport(IMPORT_LIBRARY)] private static extern void NBC_SetOnConnectionInitiated(OnConnectionInitiatedCallback cb);
         [DllImport(IMPORT_LIBRARY)] private static extern void NBC_SetOnConnectionEstablished(OnConnectionEstablishedCallback cb);
@@ -267,7 +272,7 @@ namespace Netcode.Transports.NearbyConnections
         // -------------------------------------------------------------------------------------
         // Callback delegate signatures (MUST match C)
         // -------------------------------------------------------------------------------------
-        [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate void OnPeerFoundCallback(string endpointId, string name);
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate void OnDiscoveryPeerFoundCallback(string endpointId, string name);
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate void OnPeerLostCallback(string endpointId);
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate void OnConnectionInitiatedCallback(string endpointId, string name, string authDigits, int authStatus);
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate void OnConnectionEstablishedCallback(string endpointId);
@@ -278,19 +283,13 @@ namespace Netcode.Transports.NearbyConnections
         // Callback methods invoked by native layer
         // -------------------------------------------------------------------------------------
 
-        [AOT.MonoPInvokeCallback(typeof(OnPeerFoundCallback))]
-        private static void OnPeerFoundDelegate(string endpointId, string name)
+        [AOT.MonoPInvokeCallback(typeof(OnDiscoveryPeerFoundCallback))]
+        private static void OnDiscoveryPeerFoundDelegate(string endpointId, string name)
         {
             if (s_instance == null) return;
-            if (!s_instance._endpointNames.ContainsKey(endpointId))
-                s_instance._endpointNames.Add(endpointId, name);
-            else
-                s_instance._endpointNames[endpointId] = name;
-
-            if (!s_instance._endpointStatuses.ContainsKey(endpointId))
-                s_instance._endpointStatuses.Add(endpointId, EndpointStatus.ADVERTISING);
-            else
-                s_instance._endpointStatuses[endpointId] = EndpointStatus.ADVERTISING;
+            s_instance._endpointNames.Add(endpointId, name);
+            s_instance._endpointStatuses.Add(endpointId, EndpointStatus.ADVERTISING);
+            s_instance._endpointIdHashes.Add(s, Instance.ServerClientId);
 
             s_instance.OnBrowserFoundPeer?.InvokeOnMainThread(endpointId, name);
 
@@ -299,7 +298,7 @@ namespace Netcode.Transports.NearbyConnections
         }
 
         [AOT.MonoPInvokeCallback(typeof(OnPeerLostCallback))]
-        private static void OnPeerLostDelegate(string endpointId)
+        private static void OnDiscoveryPeerLostDelegate(string endpointId)
         {
             if (s_instance == null) return;
             string disconnectedName = s_instance._endpointNames[endpointId];
@@ -307,6 +306,8 @@ namespace Netcode.Transports.NearbyConnections
             s_instance.RemoveEndpointData(endpointId);
         }
 
+        // This is the point at which an Advertising endpoint (the Server, in P2P_START Strategy) first "sees" the discovering endpoint,
+        // when it receives it's connection request.
         [AOT.MonoPInvokeCallback(typeof(OnConnectionInitiatedCallback))]
         private static void OnConnectionInitiatedDelegate(string endpointId, string name, string authDigits, int authStatus)
         {
@@ -354,11 +355,10 @@ namespace Netcode.Transports.NearbyConnections
         private static void OnConnectionEstablishedDelegate(string endpointId)
         {
             if (s_instance == null) return;
-            //s_instance._isBrowsing = false;
-            //s_instance._isAdvertising = false;
+            if (Instance.Strategy == ConnectionStrategy.P2P_STAR && NetworkManager.Singleton.IsServer)
             
             s_instance.MainThreadInvokeOnTransportEvent(NetworkEvent.Connect,
-                s_instance._endpointIdHashes.Add(endpointId), default);
+                s_instance._endpointIdHashes[endpointId], default);
             s_instance._endpointStatuses[endpointId] = EndpointStatus.CONNECTED;
         }
 
@@ -410,25 +410,30 @@ namespace Netcode.Transports.NearbyConnections
 
         public void ConfigureNickname(string nickname)
         {
-            configNickname = nickname;
+            _configNickname = nickname;
         }
 
         public void ConfigureServiceId(string serviceId)
         {
-            configServiceId = serviceId;
+            _configServiceId = serviceId;
+        }
+
+        public void ConfigureNetworkingStrategy(ConnectionStrategy strategy)
+        {
+            _configConnectionStrategy = strategy;
         }
 
         public override void Initialize(NetworkManager networkManager)
         {
             StartCoroutine(RequestNearbyPermissions());
-            _sessionData = new SessionData(configNickname, configServiceId);
+            _sessionData = new SessionData(_configNickname, _configServiceId, _configConnectionStrategy);
 
             // Initialize native NC layer
             NBC_Initialize();
 
             // Hook native callbacks
-            NBC_SetOnPeerFound(OnPeerFoundDelegate);
-            NBC_SetOnPeerLost(OnPeerLostDelegate);
+            NBC_SetOnPeerFound(OnDiscoveryPeerFoundDelegate);
+            NBC_SetOnPeerLost(OnDiscoveryPeerLostDelegate);
             NBC_SetOnConnectionInitiated(OnConnectionInitiatedDelegate);
             NBC_SetOnConnectionEstablished(OnConnectionEstablishedDelegate);
             NBC_SetOnConnectionDisconnected(OnConnectionDisconnectedDelegate);
@@ -492,7 +497,7 @@ namespace Netcode.Transports.NearbyConnections
             {
                 _endpointStatuses.Clear();
                 Debug.Log("[NBC] StartAdvertising()");
-                NBC_StartAdvertising(Nickname, ServiceId, (int)ConnectionType.DISRUPTIVE, false, (int)ConnectionStrategy.P2P_CLUSTER);
+                NBC_StartAdvertising(Nickname, ServiceId, (int)ConnectionType.DISRUPTIVE, false, (int)ConnectionStrategy.P2P_STAR);
                 _isAdvertising = true;
             }
         }

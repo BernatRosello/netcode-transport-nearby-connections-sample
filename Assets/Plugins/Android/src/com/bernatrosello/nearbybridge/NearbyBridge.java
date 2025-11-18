@@ -232,15 +232,15 @@ public class NearbyBridge {
     
     private static Strategy IntToStrategy(int strategyEnumVal) {
         switch(strategyEnumVal) {
+            case 0:
+            default:
+                return Strategy.P2P_CLUSTER;
+                
             case 1:
                 return Strategy.P2P_POINT_TO_POINT;
 
             case 2:
                 return Strategy.P2P_STAR;
-
-            case 0:
-            default:
-                return Strategy.P2P_CLUSTER;
         }
     }
 }
