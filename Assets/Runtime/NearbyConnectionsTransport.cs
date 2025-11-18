@@ -73,6 +73,17 @@ namespace Netcode.Transports.NearbyConnections
             private readonly Dictionary<string, ulong> hashDict = new Dictionary<string, ulong>();
             private readonly Dictionary<ulong, string> stringDict = new Dictionary<ulong, string>();
 
+            public ulong TryAdd(string s)
+            {
+                if (hashDict.ContainsKey(s))
+                {
+                    return hashDict[s];
+                }
+                else
+                {
+                    return Add(s);
+                }
+            }
             public ulong Add(string s)
             {
                 var hash = GetHashCodeUInt64(s);
@@ -129,6 +140,12 @@ namespace Netcode.Transports.NearbyConnections
             IEnumerator IEnumerable.GetEnumerator()
             {
                 return GetEnumerator();
+            }
+
+            public void AddServer(string endpointId)
+            {
+                hashDict.Add(endpointId, Instance.ServerClientId);
+                stringDict.Add(0, endpointId);
             }
         }
 
@@ -278,6 +295,7 @@ namespace Netcode.Transports.NearbyConnections
         // Callback methods invoked by native layer
         // -------------------------------------------------------------------------------------
 
+//  Happens on Browsing Peer
         [AOT.MonoPInvokeCallback(typeof(OnPeerFoundCallback))]
         private static void OnPeerFoundDelegate(string endpointId, string name)
         {
@@ -291,6 +309,8 @@ namespace Netcode.Transports.NearbyConnections
                 s_instance._endpointStatuses.Add(endpointId, EndpointStatus.ADVERTISING);
             else
                 s_instance._endpointStatuses[endpointId] = EndpointStatus.ADVERTISING;
+            
+            s_instance._endpointIdHashes.AddServer(endpointId);
 
             s_instance.OnBrowserFoundPeer?.InvokeOnMainThread(endpointId, name);
 
@@ -319,7 +339,6 @@ namespace Netcode.Transports.NearbyConnections
                     if (s_instance._isAdvertising)
                     {
                         s_instance.EndpointNames[endpointId] = name;
-                        s_instance._endpointIdHashes.Add(endpointId);
                         s_instance.EndpointStatuses[endpointId] = EndpointStatus.REQUESTING;
                         s_instance.OnAdvertiserReceivedConnectionRequest?.InvokeOnMainThread(endpointId, name);
 
@@ -354,11 +373,11 @@ namespace Netcode.Transports.NearbyConnections
         private static void OnConnectionEstablishedDelegate(string endpointId)
         {
             if (s_instance == null) return;
-            //s_instance._isBrowsing = false;
-            //s_instance._isAdvertising = false;
+            // We try add because it might be the server, in which case it already had it's hash established as 0 when it was found during Browsing.
+            ulong remoteClientId = s_instance._endpointIdHashes.TryAdd(endpointId);
             
-            s_instance.MainThreadInvokeOnTransportEvent(NetworkEvent.Connect,
-                s_instance._endpointIdHashes.Add(endpointId), default);
+            s_instance.MainThreadInvokeOnTransportEvent(NetworkEvent.Connect, remoteClientId
+                , default);
             s_instance._endpointStatuses[endpointId] = EndpointStatus.CONNECTED;
         }
 
