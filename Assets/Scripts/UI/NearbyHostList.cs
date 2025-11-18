@@ -27,7 +27,7 @@ public class NearbyHostList : MonoBehaviour
         _nbcTransport = NBCTransport.Instance;
 
         _nbcTransport.OnBrowserFoundPeer += (string _,string _) => UpdateNearbyHostList() ;
-        _nbcTransport.OnLostPeer +=  (string _, string _) => UpdateNearbyHostList() ;
+        _nbcTransport.OnBrowserLostPeer +=  (string _, string _) => UpdateNearbyHostList() ;
         _nbcTransport.OnBrowserSentConnectionRequest += (string _, string _) => UpdateNearbyHostList();
         NetworkManager.Singleton.OnClientConnectedCallback += (ulong _) => UpdateNearbyHostList();
         UpdateNearbyHostList();

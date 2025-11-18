@@ -154,10 +154,12 @@ public class NearbyBridge {
     private static final EndpointDiscoveryCallback endpointDiscoveryCallback = new EndpointDiscoveryCallback() {
         @Override
         public void onEndpointFound(String endpointId, DiscoveredEndpointInfo info) {
+            Log.d(TAG, "found endpoint " + endpointId + " with name " + info.getEndpointName());
             nativeOnPeerFound(endpointId, info.getEndpointName());
         }
         @Override
         public void onEndpointLost(String endpointId) {
+            Log.d(TAG, "lost endpoint " + endpointId);
             nativeOnPeerLost(endpointId);
         }
     };

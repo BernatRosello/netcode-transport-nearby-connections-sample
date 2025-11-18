@@ -34,12 +34,16 @@ namespace Netcode.Transports.NearbyConnections
         {
             public string name { get; }
             public string serviceId { get; }
+            public bool lowPower { get; }
+            public ConnectionType type { get; }
             public ConnectionStrategy strategy { get; }
 
-            public SessionData(string _name, string _serviceId, ConnectionStrategy _strategy)
+            public SessionData(string _name, string _serviceId, ConnectionType _type, bool _lowPower, ConnectionStrategy _strategy)
             {
                 name = _name;
                 serviceId = _serviceId;
+                type = _type;
+                lowPower = _lowPower;
                 strategy = _strategy;
             }
         }
@@ -75,17 +79,6 @@ namespace Netcode.Transports.NearbyConnections
             private readonly Dictionary<string, ulong> hashDict = new Dictionary<string, ulong>();
             private readonly Dictionary<ulong, string> stringDict = new Dictionary<ulong, string>();
 
-            public ulong TryAdd(string s)
-            {
-                if (hashDict.ContainsKey(s))
-                {
-                    return hashDict[s];
-                }
-                else
-                {
-                    return Add(s);
-                }
-            }
             public ulong Add(string s)
             {
                 var hash = GetHashCodeUInt64(s);
@@ -147,7 +140,7 @@ namespace Netcode.Transports.NearbyConnections
             public void AddServer(string endpointId)
             {
                 hashDict.Add(endpointId, Instance.ServerClientId);
-                stringDict.Add(0, endpointId);
+                stringDict.Add(Instance.ServerClientId, endpointId);
             }
         }
 
@@ -177,8 +170,7 @@ namespace Netcode.Transports.NearbyConnections
             DISRUPTIVE = 1,
             /// <summary>
             /// Nearby Connections should not change the device's Wi-Fi or Bluetooth status.
-            /// </summary>
-            NON_DISRUPTIVE = 2
+            /// </summary>NON_DISRUPTIVE = 2
         }
         public enum ConnectionStrategy : int
         {
@@ -217,10 +209,19 @@ namespace Netcode.Transports.NearbyConnections
         private string _configServiceId = "untiy-nc";
         [SerializeField, Tooltip("This will be the name of your device in the network.")]
         private string _configNickname = "UnityPeer";
+        [SerializeField, Tooltip("This will be the connection type used in the P2P Nearby network.")]
+        private ConnectionType _configConnectionType = ConnectionType.DISRUPTIVE;
+        
+        [SerializeField, Tooltip("LowPower setting to be used by this endpoint in the next initialized Nearby Session.")]
+        private bool _configLowPower = false;
+
         [SerializeField, Tooltip("This will be the connection strategy used in the P2P Nearby network.")]
         private ConnectionStrategy _configConnectionStrategy = ConnectionStrategy.P2P_STAR;
+
         public string ServiceId => _sessionData.serviceId;
         public string Nickname => _sessionData.name;
+        public ConnectionType TypeOfConnection => _sessionData.type;
+        public bool LowPower => _sessionData.lowPower;
         public ConnectionStrategy Strategy => _sessionData.strategy;
 
         [Header("Host Config")]
@@ -258,7 +259,7 @@ namespace Netcode.Transports.NearbyConnections
                 .ToList();
         public List<(string id, string name)> GetAllEndpoints() => EndpointNames.Select(kvp => (kvp.Key, kvp.Value)).ToList();
 
-        private TransportHashes _endpointIdHashes = new TransportHashes();
+        private TransportHashes _transportIds = new TransportHashes();
 
         // -------------------------------------------------------------------------------------
         // Native imports (wrappers for nc_unity_adapter.h)
@@ -304,13 +305,14 @@ namespace Netcode.Transports.NearbyConnections
         private static void OnDiscoveryPeerFoundDelegate(string endpointId, string name)
         {
             if (s_instance == null) return;
+
+            s_instance._transportIds.AddServer(endpointId);
             s_instance._endpointNames.Add(endpointId, name);
-            s_instance._endpointStatuses.Add(endpointId, EndpointStatus.ADVERTISING);            
-            s_instance._endpointIdHashes.AddServer(endpointId);
+            s_instance._endpointStatuses.Add(endpointId, EndpointStatus.ADVERTISING);
 
             s_instance.OnBrowserFoundPeer?.InvokeOnMainThread(endpointId, name);
 
-            if (s_instance.AutoSendConnectionRequest && s_instance._isBrowsing)
+            if (s_instance.AutoSendConnectionRequest)
                 s_instance.SendConnectionRequest(endpointId);
         }
 
@@ -319,7 +321,7 @@ namespace Netcode.Transports.NearbyConnections
         {
             if (s_instance == null) return;
             string disconnectedName = s_instance._endpointNames[endpointId];
-            s_instance.OnLostPeer?.InvokeOnMainThread(endpointId, disconnectedName);
+            s_instance.OnBrowserLostPeer?.InvokeOnMainThread(endpointId, disconnectedName);
             s_instance.RemoveEndpointData(endpointId);
         }
 
@@ -334,10 +336,12 @@ namespace Netcode.Transports.NearbyConnections
                 case 0:
                     s_instance._pendingAuthCodes.Add(endpointId, authDigits);
 
+                    // As advertisers we only get to see the peer upon them requesting a connections, so this is where we register their info
                     if (s_instance._isAdvertising)
                     {
-                        s_instance.EndpointNames[endpointId] = name;
-                        s_instance.EndpointStatuses[endpointId] = EndpointStatus.REQUESTING;
+                        s_instance.EndpointNames.Add(endpointId, name);
+                        s_instance.EndpointStatuses.Add(endpointId, EndpointStatus.REQUESTING);
+                        s_instance._transportIds.Add(endpointId);
                         s_instance.OnAdvertiserReceivedConnectionRequest?.InvokeOnMainThread(endpointId, name);
 
                     }
@@ -371,10 +375,11 @@ namespace Netcode.Transports.NearbyConnections
         private static void OnConnectionEstablishedDelegate(string endpointId)
         {
             if (s_instance == null) return;
-            if (Instance.Strategy == ConnectionStrategy.P2P_STAR && NetworkManager.Singleton.IsServer)
-            
+            Debug.Log("Established connection to endpoint " + endpointId + " with name " + s_instance.EndpointNames[endpointId] + " and transportId: " + s_instance._transportIds[endpointId]);
+
             s_instance.MainThreadInvokeOnTransportEvent(NetworkEvent.Connect,
-                s_instance._endpointIdHashes[endpointId], default);
+                s_instance._transportIds[endpointId], default);
+                
             s_instance._endpointStatuses[endpointId] = EndpointStatus.CONNECTED;
         }
 
@@ -383,7 +388,7 @@ namespace Netcode.Transports.NearbyConnections
         {
             if (s_instance == null) return;
             s_instance.MainThreadInvokeOnTransportEvent(NetworkEvent.Disconnect,
-                s_instance._endpointIdHashes[endpointId], default);
+                s_instance._transportIds[endpointId], default);
             s_instance.RemoveEndpointData(endpointId);
         }
 
@@ -393,7 +398,7 @@ namespace Netcode.Transports.NearbyConnections
             if (s_instance == null) return;
             byte[] data = new byte[len];
             Marshal.Copy(dataPtr, data, 0, len);
-            s_instance.MainThreadInvokeOnTransportEvent(NetworkEvent.Data, s_instance._endpointIdHashes[endpointId],
+            s_instance.MainThreadInvokeOnTransportEvent(NetworkEvent.Data, s_instance._transportIds[endpointId],
                 new ArraySegment<byte>(data, 0, len));
         }
 
@@ -442,7 +447,7 @@ namespace Netcode.Transports.NearbyConnections
         public override void Initialize(NetworkManager networkManager)
         {
             StartCoroutine(RequestNearbyPermissions());
-            _sessionData = new SessionData(_configNickname, _configServiceId, _configConnectionStrategy);
+            _sessionData = new SessionData(_configNickname, _configServiceId, _configConnectionType, _configLowPower, _configConnectionStrategy);
 
             // Initialize native NC layer
             NBC_Initialize();
@@ -513,7 +518,7 @@ namespace Netcode.Transports.NearbyConnections
             {
                 _endpointStatuses.Clear();
                 Debug.Log("[NBC] StartAdvertising()");
-                NBC_StartAdvertising(Nickname, ServiceId, (int)ConnectionType.DISRUPTIVE, false, (int)ConnectionStrategy.P2P_STAR);
+                NBC_StartAdvertising(Nickname, ServiceId, (int)TypeOfConnection, LowPower, (int)Strategy);
                 _isAdvertising = true;
             }
         }
@@ -533,7 +538,7 @@ namespace Netcode.Transports.NearbyConnections
             {
                 _endpointNames.Clear();
                 Debug.Log("[NBC] StartDiscovery()");
-                NBC_StartDiscovery(ServiceId, false, (int)ConnectionStrategy.P2P_CLUSTER);
+                NBC_StartDiscovery(ServiceId, LowPower, (int)Strategy);
                 _isBrowsing = true;
             }
         }
@@ -577,16 +582,17 @@ namespace Netcode.Transports.NearbyConnections
 
         public override void Send(ulong transportId, ArraySegment<byte> data, NetworkDelivery delivery)
         {
+            Debug.Log("Sending " + data.Count + "bytes to " + _transportIds[transportId] + " with transportId: " + transportId);
             //bool reliable = !(delivery == NetworkDelivery.Unreliable || delivery == NetworkDelivery.UnreliableSequenced);
-            if (transportId != NetworkManager.Singleton.LocalClientId)
+            //if (transportId != NetworkManager.Singleton.LocalClientId)
             {
-                NBC_SendBytes(_endpointIdHashes[transportId], data.Array, data.Count);
+                NBC_SendBytes(_transportIds[transportId], data.Array, data.Count);
             }
-            else
-            {
-                // Just forward the data directly because we're sending it to ourselves
-                InvokeOnTransportEvent(NetworkEvent.Data, transportId, data, Time.realtimeSinceStartup);
-            }
+            //else
+            //{
+            //    // Just forward the data directly because we're sending it to ourselves
+            //    InvokeOnTransportEvent(NetworkEvent.Data, transportId, data, Time.realtimeSinceStartup);
+            //}
         }
 
         public override ulong GetCurrentRtt(ulong transportId) => 0;
@@ -594,12 +600,12 @@ namespace Netcode.Transports.NearbyConnections
         public override void DisconnectLocalClient() { }
         public override void DisconnectRemoteClient(ulong transportId)
         {
-            NBC_Disconnect(_endpointIdHashes[transportId]);
+            NBC_Disconnect(_transportIds[transportId]);
         }
 
         private void RemoveEndpointData(string endpointId)
         {
-            _endpointIdHashes.Remove(endpointId);
+            _transportIds.Remove(endpointId);
             _endpointNames.Remove(endpointId);
             _endpointStatuses.Remove(endpointId);
             _pendingAuthCodes.Remove(endpointId);
@@ -621,7 +627,7 @@ namespace Netcode.Transports.NearbyConnections
         /// The first parameter is the host peer key in the dict.
         /// The second parameter is the name of the host peer.
         /// </summary>
-        public event Action<string, string> OnLostPeer;
+        public event Action<string, string> OnBrowserLostPeer;
 
         /// <summary>
         /// Invoked when the advertiser receives a connection request.

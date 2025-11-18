@@ -25,7 +25,7 @@ public class ConnectionRequestList : MonoBehaviour
         // Get the reference of the nbc transport
         _nbcTransport = NBCTransport.Instance;
 
-        _nbcTransport.OnLostPeer += (string _, string _) => UpdateConnectionRequestList();
+        _nbcTransport.OnBrowserLostPeer += (string _, string _) => UpdateConnectionRequestList();
         _nbcTransport.OnAdvertiserReceivedConnectionRequest += (string _, string _) => UpdateConnectionRequestList();
         NetworkManager.Singleton.OnClientConnectedCallback += (ulong _) => UpdateConnectionRequestList();
         UpdateConnectionRequestList();
