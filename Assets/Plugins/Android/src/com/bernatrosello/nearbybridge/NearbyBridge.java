@@ -167,7 +167,7 @@ public class NearbyBridge {
     private static final PayloadCallback payloadCallback = new PayloadCallback() {
         @Override
         public void onPayloadReceived(String endpointId, Payload payload) {
-            Log.d(TAG, "Endpoint["+endpointId+"]<= Payload["+ payload.getId() +"]");
+            //Log.d(TAG, "Endpoint["+endpointId+"]<= Payload["+ payload.getId() +"]");
             if (payload.getType() == Payload.Type.BYTES) {
                 byte[] b = payload.asBytes();
                 nativeOnPayloadReceived(endpointId, b);
@@ -179,7 +179,7 @@ public class NearbyBridge {
 
         @Override
         public void onPayloadTransferUpdate(String endpointId, PayloadTransferUpdate payloadUpdate) {
-            Log.d(TAG, "Endpoint["+endpointId+"]<= Payload[" + payloadUpdate.getPayloadId() + "] progress: " + payloadUpdate.getBytesTransferred() + "/" + payloadUpdate.getTotalBytes());
+            //Log.d(TAG, "Endpoint["+endpointId+"]<= Payload[" + payloadUpdate.getPayloadId() + "] progress: " + payloadUpdate.getBytesTransferred() + "/" + payloadUpdate.getTotalBytes());
             // TODO: map to native progress callback ?
         }
     };
