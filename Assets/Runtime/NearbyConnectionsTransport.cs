@@ -175,7 +175,8 @@ namespace Netcode.Transports.NearbyConnections
             DISRUPTIVE = 1,
             /// <summary>
             /// Nearby Connections should not change the device's Wi-Fi or Bluetooth status.
-            /// </summary>NON_DISRUPTIVE = 2
+            /// </summary>
+            NON_DISRUPTIVE = 2
         }
         public enum ConnectionStrategy : int
         {
@@ -325,7 +326,7 @@ namespace Netcode.Transports.NearbyConnections
         }
 
         [AOT.MonoPInvokeCallback(typeof(OnPeerLostCallback))]
-        private static void OnDiscoveryPeerLostDelegate(string endpointId)
+            private static void OnDiscoveryPeerLostDelegate(string endpointId)
         {
             if (s_instance == null) return;
             string disconnectedName = s_instance._endpointNames[endpointId];

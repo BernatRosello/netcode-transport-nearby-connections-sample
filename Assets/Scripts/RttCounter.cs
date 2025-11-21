@@ -1,43 +1,185 @@
-// SPDX-FileCopyrightText: Copyright 2024 Reality Design Lab <dev@reality.design>
-// SPDX-FileContributor: Yuchen Zhang <yuchenz27@outlook.com>
-// SPDX-FileContributor: Botao Amber Hu <botao@reality.design>
-// SPDX-License-Identifier: MIT
-
 using UnityEngine;
 using Unity.Netcode;
+using System.Collections.Generic;
+using Unity.Collections;
 
 public class RttCounter : NetworkBehaviour
 {
-    public float Rtt => _rtt;
+    public float Rtt => _rtt * 1000f;
+    public float RpcPing => _ping * 1000f;
+    public float MessagePing => _messagePing * 1000f;   // NEW
+
+    private float _ping = 0f;               // RPC exponential moving average RTT
+    private float _messagePing = 0f;        // NEW: lightweight message RTT EMA
+
+    private int _pingCount = 0;
+    private float _timeAccumulator = 0f;
 
     private float _rtt = 0f;
 
-    private void Update()
+    // Track send times for each ping
+    private Dictionary<int, float> _sendTimes = new Dictionary<int, float>();
+    
+    // NEW: track lightweight message ping send times
+    private Dictionary<int, float> _msgSendTimes = new Dictionary<int, float>();
+
+    // Smoothing factor for exponential moving average (0.1–0.3 recommended)
+    private const float alpha = 0.2f;
+
+    private void Start()
     {
-        if (IsSpawned && !IsServer)
+        // Server registers handler for lightweight ping
+        if (IsServer)
         {
-            RequestRttServerRpc(Time.time);
+            NetworkManager.Singleton.CustomMessagingManager.RegisterNamedMessageHandler(
+                "msgping",
+                OnReceiveMsgPing
+            );
+        }
+
+        // Client registers pong handler
+        if (IsClient)
+        {
+            NetworkManager.Singleton.CustomMessagingManager.RegisterNamedMessageHandler(
+                "msgpong",
+                OnReceiveMsgPong
+            );
         }
     }
 
-    [ServerRpc(RequireOwnership = false)]
-    private void RequestRttServerRpc(float clientTimestamp, ServerRpcParams serverRpcParams = default)
+    private void Update()
     {
-        // NOTE! In case you know a list of ClientId's ahead of time, that does not need change,
-        // Then please consider caching this (as a member variable), to avoid Allocating Memory every time you run this function
-        ClientRpcParams clientRpcParams = new ClientRpcParams
+        if (IsSpawned && IsClient)
         {
-            Send = new ClientRpcSendParams
+            _rtt = (NetworkManager.Singleton.LocalTime - NetworkManager.Singleton.ServerTime).TimeAsFloat;
+
+            _timeAccumulator += Time.deltaTime;
+
+            // ------------------------------
+            // Existing RPC ping (unchanged)
+            // ------------------------------
+            if (_timeAccumulator > 0.5f)
             {
-                TargetClientIds = new ulong[] { serverRpcParams.Receive.SenderClientId }
+                _timeAccumulator = 0f;
+                _pingCount++;
+
+                _sendTimes[_pingCount] = Time.realtimeSinceStartup;
+                _msgSendTimes[_pingCount] = Time.realtimeSinceStartup;
+
+                PingRpc(_pingCount, default);
+                SendMsgPing(_pingCount);
             }
-        };
-        RespondRttClientRpc(clientTimestamp, clientRpcParams);
+        }
     }
 
-    [ClientRpc]
-    private void RespondRttClientRpc(float clientTimestamp, ClientRpcParams _ = default)
+    // =====================================================
+    //  RPC PING (UNCHANGED)
+    // =====================================================
+
+    [Rpc(SendTo.Server)]
+    public void PingRpc(int pingCount, RpcParams rpcParams)
     {
-        _rtt = (Time.time - clientTimestamp) * 1000f;
+        PongRpc(
+            pingCount,
+            "PONG!",
+            RpcTarget.Single(rpcParams.Receive.SenderClientId, RpcTargetUse.Temp)
+        );
+    }
+
+    [Rpc(SendTo.SpecifiedInParams)]
+    void PongRpc(int pingCount, string message, RpcParams rpcParams)
+    {
+        if (_sendTimes.TryGetValue(pingCount, out float sendTime))
+        {
+            float rtt = Time.realtimeSinceStartup - sendTime;
+
+            _ping = (_ping == 0f) ? rtt : alpha * rtt + (1f - alpha) * _ping;
+
+            Debug.Log($"RPC RTT: {rtt * 1000f:0.0} ms | Avg {_ping * 1000f:0.0} ms");
+
+            _sendTimes.Remove(pingCount);
+        }
+        else
+        {
+            Debug.LogWarning($"Received pong for unknown RPC ping {pingCount}");
+        }
+    }
+
+    // =====================================================
+    //  NEW: LIGHTWEIGHT MESSAGE PING
+    // =====================================================
+
+    /// <summary>
+    /// Client → Server: send unmanaged unreliable ping
+    /// </summary>
+    private void SendMsgPing(int id)
+    {
+        var manager = NetworkManager.Singleton.CustomMessagingManager;
+
+        using (var writer = new FastBufferWriter(sizeof(int), Allocator.Temp))
+        {
+            if (writer.TryBeginWriteValue(id))
+            {
+                manager.SendNamedMessage(
+                    "msgping",
+                    NetworkManager.ServerClientId,
+                    writer,
+                    NetworkDelivery.Unreliable
+                );
+            }
+            else
+            {
+                Debug.LogError($"Failed to write into unmanaged ping var");
+            }
+        }
+    }
+
+    /// <summary>
+    /// Server receives messagePing. Immediately sends msgpong back.
+    /// </summary>
+    private void OnReceiveMsgPing(ulong sender, FastBufferReader reader)
+    {
+        reader.ReadValue(out int id);
+
+        var manager = NetworkManager.Singleton.CustomMessagingManager;
+
+        using (var writer = new FastBufferWriter(sizeof(int), Allocator.Temp))
+        {
+            
+            if (writer.TryBeginWriteValue(id))
+            {
+                manager.SendNamedMessage(
+                    "msgpong",
+                    sender,
+                    writer,
+                    NetworkDelivery.Unreliable
+                );
+            }
+            else
+            {
+                Debug.LogError($"Failed to write into unmanaged ping var");
+            }
+        }
+    }
+
+    /// <summary>
+    /// Client receives msgpong and computes lightweight RTT
+    /// </summary>
+    private void OnReceiveMsgPong(ulong sender, FastBufferReader reader)
+    {
+        reader.ReadValue(out int id);
+
+        if (_msgSendTimes.TryGetValue(id, out float sendTime))
+        {
+            float rtt = Time.realtimeSinceStartup - sendTime;
+
+            _messagePing = (_messagePing == 0f)
+                ? rtt
+                : alpha * rtt + (1f - alpha) * _messagePing;
+
+            Debug.Log($"Message RTT: {rtt * 1000f:0.0} ms | Avg {_messagePing * 1000f:0.0} ms");
+
+            _msgSendTimes.Remove(id);
+        }
     }
 }
