@@ -10,15 +10,18 @@ public class RttDisplay : MonoBehaviour
 {
     [SerializeField] private RttCounter _rttCounter;
 
-    private TMP_Text _rttText;
+    [SerializeField] private TMP_Text _rttText;
+    [SerializeField] private TMP_Text _rpcPingText;
+    [SerializeField] private TMP_Text _msgPingText;
 
     private void Start()
     {
-        _rttText = GetComponent<TMP_Text>();
     }
 
     private void Update()
     {
-        _rttText.text = $"{_rttCounter.Rtt:F4} ms";
+        _rttText.text = $"server/local time diff: {_rttCounter.Rtt:F4} ms";
+        _rpcPingText.text = $"rpc ping: {_rttCounter.RpcPing:F4} ms";
+        _msgPingText.text = $"msg ping: {_rttCounter.MessagePing:F4} ms";
     }
 }
