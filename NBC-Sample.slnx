@@ -44,6 +44,7 @@
   <Project Path="Unity.Sysroot.Linux_x86_64.csproj" />
   <Project Path="Unity.Multiplayer.Tools.Editor.csproj" />
   <Project Path="Unity.Networking.Editor.csproj" />
+  <Project Path="Netcode.Transports.NearbyConnections.csproj" />
   <Project Path="Unity.Multiplayer.Tools.NetStatsReporting.csproj" />
   <Project Path="Unity.Multiplayer.Tools.NetStats.CodeGen.csproj" />
   <Project Path="Unity.Multiplayer.Tools.DependencyInjection.csproj" />
@@ -57,5 +58,6 @@
   <Project Path="Unity.Multiplayer.Tools.Adapters.Utp2.csproj" />
   <Project Path="Unity.Collections.Editor.csproj" />
   <Project Path="Unity.SysrootPackage.Editor.csproj" />
-  <Project Path="Unity.Netcode.Editor.PackageChecker.csproj" />
+  <Project Path="Netcode.Transports.NearbyConnections.Editor.csproj" />
+  <Project Path="Unity.Netcode.PackageChecker.Editor.csproj" />
 </Solution>

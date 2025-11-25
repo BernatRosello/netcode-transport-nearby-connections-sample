@@ -11,6 +11,7 @@ public class RttCounter : NetworkBehaviour
     public float Rtt => _rtt;
 
     private float _rtt = 0f;
+    private Unity.Netcode.RpcParams myparams;
 
     private void Update()
     {
@@ -20,23 +21,14 @@ public class RttCounter : NetworkBehaviour
         }
     }
 
-    [ServerRpc(RequireOwnership = false)]
-    private void RequestRttServerRpc(float clientTimestamp, ServerRpcParams serverRpcParams = default)
+    [Rpc(SendTo.Server, InvokePermission = RpcInvokePermission.Everyone)]
+    private void RequestRttServerRpc(float clientTimestamp, RpcParams rpcParams = default)
     {
-        // NOTE! In case you know a list of ClientId's ahead of time, that does not need change,
-        // Then please consider caching this (as a member variable), to avoid Allocating Memory every time you run this function
-        ClientRpcParams clientRpcParams = new ClientRpcParams
-        {
-            Send = new ClientRpcSendParams
-            {
-                TargetClientIds = new ulong[] { serverRpcParams.Receive.SenderClientId }
-            }
-        };
-        RespondRttClientRpc(clientTimestamp, clientRpcParams);
+        RespondRttClientRpc(clientTimestamp, RpcTarget.Single(rpcParams.Receive.SenderClientId, RpcTargetUse.Temp));
     }
 
-    [ClientRpc]
-    private void RespondRttClientRpc(float clientTimestamp, ClientRpcParams _ = default)
+    [Rpc(SendTo.SpecifiedInParams)]
+    private void RespondRttClientRpc(float clientTimestamp, RpcParams rpcParams = default)
     {
         _rtt = (Time.time - clientTimestamp) * 1000f;
     }

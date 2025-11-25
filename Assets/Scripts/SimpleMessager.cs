@@ -21,7 +21,7 @@ public class SimpleMessager : NetworkBehaviour
         }
     }
 
-    [ClientRpc]
+    [Rpc(SendTo.ClientsAndHost, InvokePermission = RpcInvokePermission.Server)]
     private void HowAreYouClientRpc()
     {
         if (!IsServer)
@@ -31,9 +31,9 @@ public class SimpleMessager : NetworkBehaviour
         }
     }
 
-    [ServerRpc(RequireOwnership = false)]
-    private void IAmFineThankYouServerRpc(ServerRpcParams serverRpcParams = default)
+    [Rpc(SendTo.Server, InvokePermission = RpcInvokePermission.Everyone)]
+    private void IAmFineThankYouServerRpc(RpcParams rpcParams = default)
     {
-        Debug.Log($"[SimpleMessager] I am fine thank you! from clientId {serverRpcParams.Receive.SenderClientId} {Time.time}");
+        Debug.Log($"[SimpleMessager] I am fine thank you! from clientId {rpcParams.Receive.SenderClientId} {Time.time}");
     } 
 }
