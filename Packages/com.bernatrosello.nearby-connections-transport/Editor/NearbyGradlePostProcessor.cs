@@ -1,4 +1,4 @@
-using UnityEditor;
+/*using UnityEditor;
 using UnityEditor.Android;
 using UnityEngine;
 using System.IO;
@@ -41,4 +41,21 @@ public class NearbyGradlePostProcessor : IPostGenerateGradleAndroidProject
         File.WriteAllText(libGradle, newText);
         Debug.Log("Injected Nearby dependency into unityLibrary/build.gradle");
     }
+}
+*/using UnityEditor.Android;
+
+class NearbyGradleInjector : IAndroidGradleProject
+{
+    public void OnModifyAndroidGradleProject(AndroidGradleProject project)
+    {
+        // Select the main module (unityLibrary)
+        var unityLibrary = project.GetSubProject("unityLibrary");
+
+        // Add Google Play Nearby dependency
+        unityLibrary.dependencies.implementation.Add(
+            "com.google.android.gms:play-services-nearby:19.3.0"
+        );
+    }
+
+    public int callbackOrder => 0;
 }
