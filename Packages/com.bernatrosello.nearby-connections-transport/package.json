@@ -5,7 +5,8 @@
   "description": "A custom transport implementation with Nearby Connections for Unity Netcode for GameObjects.",
   "unity": "6000.2",
   "dependencies": {
-    "com.unity.netcode.gameobjects": "2.7.0"
+    "com.unity.netcode.gameobjects": "2.7.0",
+    "com.google.external-dependency-manager": "1.2.186"
   },
   "keywords": [
     "netcode",

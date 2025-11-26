@@ -58,6 +58,5 @@
   <Project Path="Unity.Multiplayer.Tools.Adapters.Utp2.csproj" />
   <Project Path="Unity.Collections.Editor.csproj" />
   <Project Path="Unity.SysrootPackage.Editor.csproj" />
-  <Project Path="Netcode.Transports.NearbyConnections.Editor.csproj" />
   <Project Path="Unity.Netcode.PackageChecker.Editor.csproj" />
 </Solution>

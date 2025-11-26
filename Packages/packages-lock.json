@@ -5,8 +5,16 @@
       "depth": 0,
       "source": "embedded",
       "dependencies": {
-        "com.unity.netcode.gameobjects": "2.7.0"
+        "com.unity.netcode.gameobjects": "2.7.0",
+        "com.google.external-dependency-manager": "1.2.186"
       }
+    },
+    "com.google.external-dependency-manager": {
+      "version": "1.2.186",
+      "depth": 0,
+      "source": "registry",
+      "dependencies": {},
+      "url": "https://package.openupm.com"
     },
     "com.unity.burst": {
       "version": "1.8.25",
