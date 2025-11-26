@@ -1,0 +1,9 @@
+<dependencies>
+  <androidPackages>
+    <androidPackage spec="com.google.android.gms:play-services-nearby:19.3.0">
+      <androidSdkPackageIds>
+        <androidSdkPackageId>extra-google-m2repository</androidSdkPackageId>
+      </androidSdkPackageIds>
+    </androidPackage>
+  </androidPackages>
+</dependencies>
