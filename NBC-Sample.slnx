@@ -59,4 +59,5 @@
   <Project Path="Unity.Collections.Editor.csproj" />
   <Project Path="Unity.SysrootPackage.Editor.csproj" />
   <Project Path="Unity.Netcode.PackageChecker.Editor.csproj" />
+  <Project Path="Netcode.Transports.NearbyConnections.Editor.csproj" />
 </Solution>
