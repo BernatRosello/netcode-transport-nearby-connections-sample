@@ -503,7 +503,7 @@ namespace Netcode.Transports.NearbyConnections
 
         private System.Collections.IEnumerator RequestNearbyPermissions()
         {
-#if UNITY_ANDROID && !UNITY_EDITOR
+#if UNITY_ANDROID
             string[] permissions = new string[]
             {
                 "android.permission.ACCESS_FINE_LOCATION",
