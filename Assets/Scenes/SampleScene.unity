@@ -4730,6 +4730,10 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 6e4762d7baee44db8992dc91312aebfb, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  _autoAdvertiseToggle: {fileID: 891319713}
+  _autoApproveToggle: {fileID: 809141353}
+  _autoBrowseToggle: {fileID: 1076814746}
+  _autoSendRequestToggle: {fileID: 1447569755}
 --- !u!1 &770649166
 GameObject:
   m_ObjectHideFlags: 0
@@ -5740,7 +5744,6 @@ GameObject:
   m_Component:
   - component: {fileID: 963194228}
   - component: {fileID: 963194227}
-  - component: {fileID: 963194226}
   m_Layer: 0
   m_Name: Main Camera
   m_TagString: MainCamera
@@ -5748,14 +5751,6 @@ GameObject:
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1
---- !u!81 &963194226
-AudioListener:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 963194225}
-  m_Enabled: 1
 --- !u!20 &963194227
 Camera:
   m_ObjectHideFlags: 0
@@ -6667,7 +6662,7 @@ MonoBehaviour:
   AlwaysReplicateAsRoot: 0
   SynchronizeTransform: 1
   ActiveSceneSynchronization: 0
-  SceneMigrationSynchronization: 1
+  SceneMigrationSynchronization: 0
   SpawnWithObservers: 1
   DontDestroyWithOwner: 0
   AutoObjectParentSync: 1
@@ -8503,7 +8498,7 @@ MonoBehaviour:
     NetworkIdRecycleDelay: 120
     RpcHashSize: 0
     LoadSceneTimeOut: 120
-    SpawnTimeout: 1
+    SpawnTimeout: 10
     EnableNetworkLogs: 1
     NetworkTopology: 0
     UseCMBService: 0
@@ -8586,7 +8581,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 1, y: 1}
   m_AnchorMax: {x: 1, y: 1}
-  m_AnchoredPosition: {x: -100, y: -100.00012}
+  m_AnchoredPosition: {x: -100, y: -100}
   m_SizeDelta: {x: 800, y: 120}
   m_Pivot: {x: 1, y: 1}
 --- !u!114 &1491349279

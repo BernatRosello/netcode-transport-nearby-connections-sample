@@ -24,6 +24,14 @@ namespace Netcode.Transports.NearbyConnections
         public const string IMPORT_LIBRARY = "__Internal";
 #elif UNITY_ANDROID //&& !UNITY_EDITOR
         public const string IMPORT_LIBRARY = "nc_unity";
+        readonly string[] _permissions = new string[]
+        {
+            "android.permission.ACCESS_FINE_LOCATION",
+            "android.permission.BLUETOOTH_CONNECT",
+            "android.permission.BLUETOOTH_SCAN",
+            "android.permission.BLUETOOTH_ADVERTISE",
+            "android.permission.NEARBY_WIFI_DEVICES"
+        };
 #else
         public const string IMPORT_LIBRARY = "nc";
 #endif
@@ -60,7 +68,7 @@ namespace Netcode.Transports.NearbyConnections
 
                 return x;
                 */
-                
+
                 // DETERMINISTIC ;)
                 const ulong offset = 1469598103934665603;
                 const ulong prime = 1099511628211;
@@ -207,10 +215,22 @@ namespace Netcode.Transports.NearbyConnections
 
         private static ILogger logger = Debug.unityLogger;
         private static string kTag = "NBC-Transport";
+        private bool PermissionsReady
+        {
+            get
+            {
+#if UNITY_ANDROID
+                foreach (string perm in _permissions)
+                    if (!Permission.HasUserAuthorizedPermission(perm))
+                        return false;
+#endif
+                return true;
+            }
+        }
 
         public override ulong ServerClientId => 0;
 
-        private SessionData _sessionData;
+        private SessionData _sessionData = null;
 
         [Header("Common Config")]
         [SerializeField, Tooltip("Unique service ID for this Nearby service (match on all peers).")]
@@ -219,7 +239,7 @@ namespace Netcode.Transports.NearbyConnections
         private string _configNickname = "UnityPeer";
         [SerializeField, Tooltip("This will be the connection type used in the P2P Nearby network.")]
         private ConnectionType _configConnectionType = ConnectionType.DISRUPTIVE;
-        
+
         [SerializeField, Tooltip("LowPower setting to be used by this endpoint in the next initialized Nearby Session.")]
         private bool _configLowPower = false;
 
@@ -231,14 +251,15 @@ namespace Netcode.Transports.NearbyConnections
         public ConnectionType TypeOfConnection => _sessionData.type;
         public bool LowPower => _sessionData.lowPower;
         public ConnectionStrategy Strategy => _sessionData.strategy;
+        public bool IsNearbyInitialized => _sessionData != null;
 
         [Header("Host Config")]
-        public bool AutoAdvertise = false;
-        public bool AutoApproveConnectionRequest = false;
+        public bool AutoAdvertise;
+        public bool AutoApproveConnectionRequest;
 
         [Header("Client Config")]
-        public bool AutoBrowse = false;
-        public bool AutoSendConnectionRequest = false;
+        public bool AutoBrowse;
+        public bool AutoSendConnectionRequest;
 
         private bool _isAdvertising = false;
         private bool _isBrowsing = false;
@@ -325,7 +346,7 @@ namespace Netcode.Transports.NearbyConnections
         }
 
         [AOT.MonoPInvokeCallback(typeof(OnPeerLostCallback))]
-            private static void OnDiscoveryPeerLostDelegate(string endpointId)
+        private static void OnDiscoveryPeerLostDelegate(string endpointId)
         {
             if (s_instance == null) return;
             string disconnectedName = s_instance._endpointNames[endpointId];
@@ -371,8 +392,8 @@ namespace Netcode.Transports.NearbyConnections
                     break;
             }
 
-           logger.Log(NBCTransport.kTag, "Name: " + s_instance._endpointNames[endpointId] + " EndpointId:" + endpointId + " Status: " + s_instance._endpointStatuses[endpointId]);
-           logger.Log(NBCTransport.kTag, "AuthDigits: " + authDigits + " AuthStatus: " + authStatus);
+            logger.Log(NBCTransport.kTag, "Name: " + s_instance._endpointNames[endpointId] + " EndpointId:" + endpointId + " Status: " + s_instance._endpointStatuses[endpointId]);
+            logger.Log(NBCTransport.kTag, "AuthDigits: " + authDigits + " AuthStatus: " + authStatus);
 
             s_instance.OnConnectingWithPeer?.InvokeOnMainThread(endpointId);
         }
@@ -387,7 +408,7 @@ namespace Netcode.Transports.NearbyConnections
 
             s_instance.MainThreadInvokeOnTransportEvent(NetworkEvent.Connect,
                 s_instance._transportIds[endpointId], default);
-                
+
             s_instance._endpointStatuses[endpointId] = EndpointStatus.CONNECTED;
         }
 
@@ -399,9 +420,9 @@ namespace Netcode.Transports.NearbyConnections
             if (s_instance._transportIds.ContainsKey(endpointId))
             {
                 s_instance.MainThreadInvokeOnTransportEvent(NetworkEvent.Disconnect,
-                    s_instance._transportIds[endpointId], default);    
+                    s_instance._transportIds[endpointId], default);
             }
-            
+
             s_instance.RemoveEndpointData(endpointId);
         }
 
@@ -464,13 +485,17 @@ namespace Netcode.Transports.NearbyConnections
 
         public override void Initialize(NetworkManager networkManager)
         {
-            StartCoroutine(RequestNearbyPermissions());
+            if (!PermissionsReady)
+            {
+                // Start permission flow
+                StartCoroutine(RequestNearbyPermissions());
+            }
+
+            // NOW safe to initialize native adapter
             _sessionData = new SessionData(_configNickname, _configServiceId, _configConnectionType, _configLowPower, _configConnectionStrategy);
 
-            // Initialize native NC layer
             NBC_Initialize();
 
-            // Hook native callbacks
             NBC_SetOnPeerFound(OnDiscoveryPeerFoundDelegate);
             NBC_SetOnPeerLost(OnDiscoveryPeerLostDelegate);
             NBC_SetOnConnectionInitiated(OnConnectionInitiatedDelegate);
@@ -481,6 +506,13 @@ namespace Netcode.Transports.NearbyConnections
 
         public override bool StartServer()
         {
+            if (!PermissionsReady)
+            {
+                Debug.LogError("Can't start transport, because necessary permissions haven't been granted by the user");
+                StartCoroutine(RequestNearbyPermissions());
+                return false;
+            }
+
             if (AutoAdvertise)
                 StartAdvertising();
             return true;
@@ -488,6 +520,12 @@ namespace Netcode.Transports.NearbyConnections
 
         public override bool StartClient()
         {
+            if (!PermissionsReady)
+            {
+                Debug.LogError("Can't start transport, because necessary permissions haven't been granted by the user");
+                return false;
+            }
+
             if (AutoBrowse)
                 StartBrowsing();
             return true;
@@ -501,29 +539,32 @@ namespace Netcode.Transports.NearbyConnections
             _isBrowsing = false;
         }
 
-        private System.Collections.IEnumerator RequestNearbyPermissions()
+        private IEnumerator RequestNearbyPermissions()
         {
 #if UNITY_ANDROID
-            string[] permissions = new string[]
+            foreach (string perm in _permissions)
             {
-                "android.permission.ACCESS_FINE_LOCATION",
-                "android.permission.BLUETOOTH_CONNECT",
-                "android.permission.BLUETOOTH_SCAN",
-                "android.permission.BLUETOOTH_ADVERTISE",
-                "android.permission.NEARBY_WIFI_DEVICES"
-            };
 
-            foreach (string perm in permissions)
-            {
                 if (!Permission.HasUserAuthorizedPermission(perm))
                 {
-                    Permission.RequestUserPermission(perm);
-                    // Give the system a tiny delay so dialogs can appear one by one
-                    yield return new WaitForSeconds(0.2f);
+                    if (Permission.ShouldShowRequestPermissionRationale(Permission.FineLocation))
+                    {
+                        Permission.RequestUserPermission(perm);
+                        // Wait until user responds
+                        while (!Permission.HasUserAuthorizedPermission(perm))
+                        {
+                            yield return null;
+                        }
+                    }
+                    else
+                    {
+                        // Permission still not granted AND rationale is false
+                        // This means "DENY twice" or "Don't ask again"
+                        ShowGoToSettingsDialog();
+                    }
                 }
             }
 #endif
-            yield break; // harmless no-op in Editor or non-Android
         }
 
         // -------------------------------------------------------------------------------------

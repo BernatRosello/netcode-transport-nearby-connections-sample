@@ -4,10 +4,28 @@
 // SPDX-License-Identifier: MIT
 
 using UnityEngine;
+using UnityEngine.UI;
 using Netcode.Transports.NearbyConnections;
 
 public class StartPanel : MonoBehaviour
 {
+    [SerializeField]
+    private Toggle _autoAdvertiseToggle;
+    [SerializeField]
+    private Toggle _autoApproveToggle;
+    [SerializeField]
+    private Toggle _autoBrowseToggle;
+    [SerializeField]
+    private Toggle _autoSendRequestToggle;
+
+    public void Start()
+    {
+        _autoAdvertiseToggle.SetIsOnWithoutNotify(NBCTransport.Instance.AutoAdvertise);
+        _autoApproveToggle.SetIsOnWithoutNotify(NBCTransport.Instance.AutoApproveConnectionRequest);
+        _autoBrowseToggle.SetIsOnWithoutNotify(NBCTransport.Instance.AutoBrowse);
+        _autoSendRequestToggle.SetIsOnWithoutNotify(NBCTransport.Instance.AutoSendConnectionRequest);
+    }
+    
     public void OnNicknameChanged(string nickname)
     {
         NBCTransport.Instance.ConfigureNickname(nickname);
