@@ -2,7 +2,8 @@
     "name": "Netcode.Transports.NearbyConnections.Editor",
     "rootNamespace": "Netcode.Transports.NearbyConnections.Editor",
     "references": [
-        "Unity.Netcode.Transport"
+        "Unity.Netcode.Transport",
+        "Netcode.Transports.NearbyConnections"
     ],
     "includePlatforms": [
         "Editor"

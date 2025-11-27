@@ -1,2 +1,2 @@
-C:\GAME_DEV\Repos\NBC-Sample\Library\PramData\AndroidApplicationController\Cache\com.BernatRosello.NetcodeTransportNBCSample\gradle-project\unityLibrary\src\main\cpp\CMakeLists.txt
-C:\GAME_DEV\Repos\NBC-Sample\Library\PramData\AndroidApplicationController\Cache\com.BernatRosello.NetcodeTransportNBCSample\gradle-project\unityLibrary\src\main\cpp\FramePacing\CMakeLists.txt
+C:\GAME_DEV\Repos\NBC-Sample\Library\PramData\AndroidApplicationController\Cache\com.BernatRosello.NetcodeNBCTransportSample\gradle-project\unityLibrary\src\main\cpp\CMakeLists.txt
+C:\GAME_DEV\Repos\NBC-Sample\Library\PramData\AndroidApplicationController\Cache\com.BernatRosello.NetcodeNBCTransportSample\gradle-project\unityLibrary\src\main\cpp\FramePacing\CMakeLists.txt

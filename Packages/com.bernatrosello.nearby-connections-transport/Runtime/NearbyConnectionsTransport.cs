@@ -5,10 +5,7 @@ using UnityEngine;
 using Unity.Netcode;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
-
-
-
-
+using UnityEditor;
 
 
 #if UNITY_ANDROID
@@ -22,21 +19,125 @@ namespace Netcode.Transports.NearbyConnections
     {
 #if (UNITY_IOS || UNITY_VISIONOS) && !UNITY_EDITOR
         public const string IMPORT_LIBRARY = "__Internal";
-#elif UNITY_ANDROID //&& !UNITY_EDITOR
+#elif UNITY_ANDROID && !UNITY_EDITOR
         public const string IMPORT_LIBRARY = "nc_unity";
-        readonly string[] _permissions = new string[]
-        {
-            "android.permission.ACCESS_FINE_LOCATION",
-            "android.permission.BLUETOOTH_CONNECT",
-            "android.permission.BLUETOOTH_SCAN",
-            "android.permission.BLUETOOTH_ADVERTISE",
-            "android.permission.NEARBY_WIFI_DEVICES"
-        };
 #else
         public const string IMPORT_LIBRARY = "nc";
 #endif
 
+#if UNITY_ANDROID
+        #region Android Implementation Details
+        [Header("Permission Dialog Prefab")]
+        [SerializeField] private GameObject _permissionDialogPrefab;
+        [SerializeField] private RectTransform _permissionDialogParentTransform;
+        private GameObject _activeDialog;
 
+        private static int AndroidVersion()
+        {
+#if !UNITY_EDITOR
+            using (var buildVersion = new AndroidJavaClass("android.os.Build$VERSION"))
+            {
+                return buildVersion.GetStatic<int>("SDK_INT");
+            }
+#else       
+            // Default to target for editor and build process purposes
+            // like manifest permission injection on post process build.
+            return (int)PlayerSettings.Android.targetSdkVersion;
+#endif
+        }
+
+        public static class AndroidPermissionCheck
+        {
+            private static readonly AndroidJavaObject activity =
+                new AndroidJavaClass("com.unity3d.player.UnityPlayer")
+                .GetStatic<AndroidJavaObject>("currentActivity");
+
+            public static bool HasPermission(string permission)
+            {
+                int result = activity.Call<int>(
+                    "checkSelfPermission",
+                    permission
+                );
+
+                // PackageManager.PERMISSION_GRANTED = 0
+                return result == 0;
+            }
+        }
+
+        public readonly struct PermissionDef
+        {
+            public readonly string Name;
+            public readonly string MinSdk;
+            public readonly string MaxSdk;
+            public readonly bool RuntimePermission;
+
+            public PermissionDef(string name, string minSdk = null, string maxSdk = null, bool runtimePerm = false)
+            {
+                Name = name;
+                MinSdk = minSdk;
+                MaxSdk = maxSdk;
+                RuntimePermission = runtimePerm;
+            }
+
+            public bool AppliesTo(int sdk)
+            {
+                int minSdkNum = string.IsNullOrEmpty(MinSdk) ? 0 : int.Parse(MinSdk);
+
+                int maxSdkNum = string.IsNullOrEmpty(MaxSdk) ? int.MaxValue : int.Parse(MaxSdk);
+                return sdk >= minSdkNum && sdk <= maxSdkNum;
+            }
+
+            public bool IsRuntimePermission(int sdk)
+            {
+                if (sdk >= 23 && RuntimePermission && AppliesTo(sdk))
+                {
+                    return true;
+                }
+                else
+                {
+                    return false;
+                }
+            }
+        }
+
+        public static class NearbyPermissionDefinitions
+        {
+            /// <summary>
+            /// https://developers.google.com/nearby/connections/android/get-started#request_permissions
+            /// </summary>
+            private static readonly PermissionDef[] _permissions = {
+                // Required for Nearby Connections across Android versions (we have to remove the specified maxSdk:31, because it is outdated in the docs)
+                new("android.permission.ACCESS_WIFI_STATE"),
+                new("android.permission.CHANGE_WIFI_STATE"),
+
+                new("android.permission.BLUETOOTH",         maxSdk: "30"),
+                new("android.permission.BLUETOOTH_ADMIN",   maxSdk: "30"),
+
+                new("android.permission.ACCESS_COARSE_LOCATION",  maxSdk: "28"),
+                new("android.permission.ACCESS_FINE_LOCATION",    minSdk: "29", maxSdk: "31", runtimePerm: true),
+
+                // Android 12+ Bluetooth permissions
+                new("android.permission.BLUETOOTH_SCAN",        minSdk: "31", runtimePerm: true),
+                new("android.permission.BLUETOOTH_ADVERTISE",   minSdk: "31", runtimePerm: true),
+                new("android.permission.BLUETOOTH_CONNECT",     minSdk: "31", runtimePerm: true),
+
+                // Android 13+ Nearby WiFi
+                new("android.permission.NEARBY_WIFI_DEVICES", minSdk: "32"),
+
+                // Optional for file payloads (NO LONGER SUPPORTED API 33+)
+                new("android.permission.READ_EXTERNAL_STORAGE", minSdk: "16", maxSdk: "32", runtimePerm: true)
+            };
+            /// <summary>
+            /// Gets all the permissions necessary to run on the current device's SDK level (if in editor defaults to targetSdk).
+            /// </summary>
+            public static PermissionDef[] Permissions => _permissions.Where(perm => perm.AppliesTo(AndroidVersion())).ToArray();
+            /// <summary>
+            /// Gets the RUNTIME permissions necessary to run on the current device's SDK level (if in editor defaults to targetSdk).
+            /// </summary>
+            public static PermissionDef[] RuntimePermissions => _permissions.Where(perm => perm.IsRuntimePermission(AndroidVersion())).ToArray();
+        }
+        #endregion
+#endif
         public class SessionData
         {
             public string name { get; }
@@ -219,10 +320,15 @@ namespace Netcode.Transports.NearbyConnections
         {
             get
             {
-#if UNITY_ANDROID
-                foreach (string perm in _permissions)
-                    if (!Permission.HasUserAuthorizedPermission(perm))
+#if UNITY_ANDROID //&& !UNITY_EDITOR
+                foreach(var perm in NearbyPermissionDefinitions.Permissions)
+                {
+                    if (!AndroidPermissionCheck.HasPermission(perm.Name))
+                    {
+                        logger.LogWarning(kTag, $"Permission {perm.Name} granted=FALSE !");
                         return false;
+                    }
+                }
 #endif
                 return true;
             }
@@ -488,7 +594,7 @@ namespace Netcode.Transports.NearbyConnections
             if (!PermissionsReady)
             {
                 // Start permission flow
-                StartCoroutine(RequestNearbyPermissions());
+                StartCoroutine(RequestPermissions());
             }
 
             // NOW safe to initialize native adapter
@@ -508,8 +614,8 @@ namespace Netcode.Transports.NearbyConnections
         {
             if (!PermissionsReady)
             {
-                Debug.LogError("Can't start transport, because necessary permissions haven't been granted by the user");
-                StartCoroutine(RequestNearbyPermissions());
+                logger.LogError(NBCTransport.kTag,"Can't start transport, because necessary permissions haven't been granted by the user");
+                StartCoroutine(RequestPermissions());
                 return false;
             }
 
@@ -522,7 +628,6 @@ namespace Netcode.Transports.NearbyConnections
         {
             if (!PermissionsReady)
             {
-                Debug.LogError("Can't start transport, because necessary permissions haven't been granted by the user");
                 return false;
             }
 
@@ -539,33 +644,91 @@ namespace Netcode.Transports.NearbyConnections
             _isBrowsing = false;
         }
 
-        private IEnumerator RequestNearbyPermissions()
+        #region Permission Management
+        private IEnumerator RequestPermissions()
         {
-#if UNITY_ANDROID
-            foreach (string perm in _permissions)
-            {
-
-                if (!Permission.HasUserAuthorizedPermission(perm))
-                {
-                    if (Permission.ShouldShowRequestPermissionRationale(Permission.FineLocation))
-                    {
-                        Permission.RequestUserPermission(perm);
-                        // Wait until user responds
-                        while (!Permission.HasUserAuthorizedPermission(perm))
-                        {
-                            yield return null;
-                        }
-                    }
-                    else
-                    {
-                        // Permission still not granted AND rationale is false
-                        // This means "DENY twice" or "Don't ask again"
-                        ShowGoToSettingsDialog();
-                    }
-                }
-            }
+#if UNITY_ANDROID //&& !UNITY_EDITOR
+            var callbacks = new PermissionCallbacks();
+            callbacks.PermissionDenied += (string _) => { ShowGoToSettingsDialog(); };
+            Permission.RequestUserPermissions(NearbyPermissionDefinitions.Permissions.Select(perm => perm.Name).ToArray(), callbacks);
 #endif
+            yield return null;
         }
+
+#if UNITY_ANDROID //&& !UNITY_EDITOR
+        public void ShowGoToSettingsDialog()
+        {
+            // Prevent multiple dialogs if something loops
+            if (_activeDialog != null)
+                return;
+
+            if (_permissionDialogPrefab == null)
+            {
+                logger.LogError(NBCTransport.kTag,"[Permissions] No permissionDialogPrefab assigned.");
+                return;
+            }
+
+            // Instantiate the dialog
+            _activeDialog = Instantiate(_permissionDialogPrefab, _permissionDialogParentTransform);
+
+            // Get the controller on the instance
+            var controller = _activeDialog.GetComponent<PermissionDialogController>();
+            if (controller == null)
+            {
+                logger.LogError(NBCTransport.kTag,"[Permissions] PermissionDialogPrefab missing PermissionDialogController component.");
+                return;
+            }
+
+            // Hook up button callbacks
+            controller.OnOpenSettings = () =>
+            {
+                Debug.Log("[Permissions] Opening app settings...");
+                OpenAppSettings();
+                CloseDialog();
+            };
+
+            controller.OnCancel = () =>
+            {
+                Debug.Log("[Permissions] User canceled permission settings dialog.");
+                CloseDialog();
+            };
+        }
+
+        private void CloseDialog()
+        {
+            if (_activeDialog != null)
+            {
+                Destroy(_activeDialog);
+                _activeDialog = null;
+            }
+        }
+
+        public void OpenAppSettings()
+        {
+            using (var unityPlayer = new AndroidJavaClass("com.unity3d.player.UnityPlayer"))
+            {
+                AndroidJavaObject currentActivity = unityPlayer.GetStatic<AndroidJavaObject>("currentActivity");
+
+                AndroidJavaClass uriClass = new AndroidJavaClass("android.net.Uri");
+                AndroidJavaObject uri = uriClass.CallStatic<AndroidJavaObject>("fromParts",
+                    "package",
+                    currentActivity.Call<string>("getPackageName"),
+                    null);
+
+                AndroidJavaObject intent = new AndroidJavaObject(
+                    "android.content.Intent",
+                    "android.settings.APPLICATION_DETAILS_SETTINGS",
+                    uri
+                );
+
+                currentActivity.Call("startActivity", intent);
+            }
+            Debug.Log("[Permissions] Cannot open settings in editor.");
+        }
+
+#endif
+
+        #endregion
 
         // -------------------------------------------------------------------------------------
         // Public control

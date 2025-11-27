@@ -1,7 +1,7 @@
 {
   "buildFiles": [
-    "C:\\GAME_DEV\\Repos\\NBC-Sample\\Library\\PramData\\AndroidApplicationController\\Cache\\com.BernatRosello.NetcodeTransportNBCSample\\gradle-project\\unityLibrary\\src\\main\\cpp\\CMakeLists.txt",
-    "C:\\GAME_DEV\\Repos\\NBC-Sample\\Library\\PramData\\AndroidApplicationController\\Cache\\com.BernatRosello.NetcodeTransportNBCSample\\gradle-project\\unityLibrary\\src\\main\\cpp\\FramePacing\\CMakeLists.txt"
+    "C:\\GAME_DEV\\Repos\\NBC-Sample\\Library\\PramData\\AndroidApplicationController\\Cache\\com.BernatRosello.NetcodeNBCTransportSample\\gradle-project\\unityLibrary\\src\\main\\cpp\\CMakeLists.txt",
+    "C:\\GAME_DEV\\Repos\\NBC-Sample\\Library\\PramData\\AndroidApplicationController\\Cache\\com.BernatRosello.NetcodeNBCTransportSample\\gradle-project\\unityLibrary\\src\\main\\cpp\\FramePacing\\CMakeLists.txt"
   ],
   "cleanCommandsComponents": [
     [
@@ -21,7 +21,7 @@
     "swappywrapper::@7e25bd1f32ce224db4e9": {
       "artifactName": "swappywrapper",
       "abi": "arm64-v8a",
-      "output": "C:\\GAME_DEV\\Repos\\NBC-Sample\\Library\\PramData\\AndroidApplicationController\\Cache\\com.BernatRosello.NetcodeTransportNBCSample\\gradle-project\\unityLibrary\\build\\intermediates\\cxx\\Debug\\5qe02t4x\\obj\\arm64-v8a\\libswappywrapper.so",
+      "output": "C:\\GAME_DEV\\Repos\\NBC-Sample\\Library\\PramData\\AndroidApplicationController\\Cache\\com.BernatRosello.NetcodeNBCTransportSample\\gradle-project\\unityLibrary\\build\\intermediates\\cxx\\Debug\\5qe02t4x\\obj\\arm64-v8a\\libswappywrapper.so",
       "runtimeFiles": []
     }
   }

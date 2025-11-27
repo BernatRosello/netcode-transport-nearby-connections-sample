@@ -6,6 +6,7 @@ using System.IO;
 using System.Text;
 using System.Xml;
 using UnityEditor.Android;
+using Netcode.Transports.NearbyConnections;
 
 public class ModifyUnityAndroidAppManifestSample : IPostGenerateGradleAndroidProject
 {
@@ -119,6 +120,28 @@ internal class AndroidManifest : AndroidXmlDocument
     {
         var manifest = SelectSingleNode("/manifest");
 
+        //
+        // 1. Find *all* existing permissions with the same android:name
+        //
+        var existingPermissions = SelectNodes(
+            $"/manifest/uses-permission[@android:name='{permissionName}']",
+            nsMgr
+        );
+
+        //
+        // 2. Remove all existing nodes so we can overwrite with correct one
+        //
+        if (existingPermissions != null)
+        {
+            foreach (XmlNode node in existingPermissions)
+            {
+                node.ParentNode.RemoveChild(node);
+            }
+        }
+
+        //
+        // 3. Create new permission with correct attributes
+        //
         XmlElement child = CreateElement("uses-permission");
 
         if (!string.IsNullOrEmpty(minSdk))
@@ -129,24 +152,18 @@ internal class AndroidManifest : AndroidXmlDocument
 
         child.Attributes.Append(CreateAndroidAttribute("name", permissionName));
 
+        //
+        // 4. Append the new permission
+        //
         manifest.AppendChild(child);
     }
 
     internal void SetNearbyConnectionsPermissions()
     {
         // Required for Nearby Connections
-        AddPermission("android.permission.ACCESS_WIFI_STATE", maxSdk: "34");
-        AddPermission("android.permission.CHANGE_WIFI_STATE", maxSdk: "34");
-        AddPermission("android.permission.BLUETOOTH", maxSdk: "30");
-        AddPermission("android.permission.BLUETOOTH_ADMIN", maxSdk: "30");
-        AddPermission("android.permission.ACCESS_COARSE_LOCATION", maxSdk: "34");
-        AddPermission("android.permission.ACCESS_FINE_LOCATION", minSdk: "29", maxSdk: "34");
-        AddPermission("android.permission.BLUETOOTH_ADVERTISE", minSdk: "31");
-        AddPermission("android.permission.BLUETOOTH_CONNECT", minSdk: "31");
-        AddPermission("android.permission.BLUETOOTH_SCAN", minSdk: "31");
-        AddPermission("android.permission.NEARBY_WIFI_DEVICES", minSdk: "32");
-
-        // Optional (only needed for file payloads)
-        AddPermission("android.permission.READ_EXTERNAL_STORAGE");
+        foreach (var permission in NBCTransport.NearbyPermissionDefinitions.Permissions)
+        {
+            AddPermission(permission.Name, permission.MinSdk, permission.MaxSdk);
+        }
     }
 }

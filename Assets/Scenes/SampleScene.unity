@@ -8535,6 +8535,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10d357a645c0259468834493c8495126, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Netcode.Transports.NearbyConnections.NBCTransport
+  _permissionDialogPrefab: {fileID: 1961531361834743032, guid: 845a5c1b7a7f3e0448fa47193a9290e5, type: 3}
+  _permissionDialogParentTransform: {fileID: 761079877}
   _configServiceId: untiy-nc
   _configNickname: UnityPeer
   _configConnectionType: 2
