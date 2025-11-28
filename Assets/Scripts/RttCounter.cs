@@ -2,6 +2,7 @@ using UnityEngine;
 using Unity.Netcode;
 using System.Collections.Generic;
 using Unity.Collections;
+using System;
 
 public class RttCounter : NetworkBehaviour
 {
@@ -20,19 +21,19 @@ public class RttCounter : NetworkBehaviour
 
     // Track send times for each ping
     private Dictionary<int, float> _sendTimes = new Dictionary<int, float>();
-    
+
     // NEW: track lightweight message ping send times
     private Dictionary<int, float> _msgSendTimes = new Dictionary<int, float>();
 
     // Smoothing factor for exponential moving average (0.1–0.3 recommended)
     private const float alpha = 0.2f;
 
-    private void Start()
+    public override void OnNetworkSpawn()
     {
         // Server registers handler for lightweight ping
         if (IsServer)
         {
-            NetworkManager.Singleton.CustomMessagingManager.RegisterNamedMessageHandler(
+            NetworkManager.CustomMessagingManager.RegisterNamedMessageHandler(
                 "msgping",
                 OnReceiveMsgPing
             );
@@ -41,11 +42,18 @@ public class RttCounter : NetworkBehaviour
         // Client registers pong handler
         if (IsClient)
         {
-            NetworkManager.Singleton.CustomMessagingManager.RegisterNamedMessageHandler(
+            NetworkManager.CustomMessagingManager.RegisterNamedMessageHandler(
                 "msgpong",
                 OnReceiveMsgPong
             );
         }
+    }
+    
+    public override void OnNetworkDespawn()
+    {
+        // De-register when the associated NetworkObject is despawned.
+        NetworkManager.CustomMessagingManager.UnregisterNamedMessageHandler("msgpong");
+        NetworkManager.CustomMessagingManager.UnregisterNamedMessageHandler("msgping");
     }
 
     private void Update()
@@ -126,25 +134,23 @@ public class RttCounter : NetworkBehaviour
     /// <summary>
     /// Client → Server: send unmanaged unreliable ping
     /// </summary>
-    private void SendMsgPing(int id)
+    private void SendMsgPing(int pingCount)
     {
         var manager = NetworkManager.Singleton.CustomMessagingManager;
 
         using (var writer = new FastBufferWriter(sizeof(int), Allocator.Temp))
         {
-            if (writer.TryBeginWriteValue(id))
+            if(!writer.TryBeginWrite(sizeof(int)))
             {
-                manager.SendNamedMessage(
-                    "msgping",
-                    NetworkManager.ServerClientId,
-                    writer,
-                    NetworkDelivery.Unreliable
-                );
+                throw new OverflowException("Not enough space in the buffer");
             }
-            else
-            {
-                Debug.LogError($"Failed to write into unmanaged ping var");
-            }
+            writer.WriteValue(pingCount);
+            manager.SendNamedMessage(
+                "msgping",
+                NetworkManager.ServerClientId,
+                writer,
+                NetworkDelivery.Unreliable
+            );
         }
     }
 
@@ -153,26 +159,28 @@ public class RttCounter : NetworkBehaviour
     /// </summary>
     private void OnReceiveMsgPing(ulong sender, FastBufferReader reader)
     {
-        reader.ReadValue(out int id);
+        int pingCount;
+        if (!reader.TryBeginRead(sizeof(int)))
+        {
+            throw new OverflowException("Not enough space in the buffer");
+        }
+        reader.ReadValue(out pingCount);
 
         var manager = NetworkManager.Singleton.CustomMessagingManager;
 
         using (var writer = new FastBufferWriter(sizeof(int), Allocator.Temp))
         {
-            
-            if (writer.TryBeginWriteValue(id))
+            if(!writer.TryBeginWrite(sizeof(int)))
             {
-                manager.SendNamedMessage(
-                    "msgpong",
-                    sender,
-                    writer,
-                    NetworkDelivery.Unreliable
-                );
+                throw new OverflowException("Not enough space in the buffer");
             }
-            else
-            {
-                Debug.LogError($"Failed to write into unmanaged ping var");
-            }
+            writer.WriteValue(pingCount);
+            manager.SendNamedMessage(
+                "msgpong",
+                sender,
+                writer,
+                NetworkDelivery.Unreliable
+            );
         }
     }
 
@@ -181,9 +189,14 @@ public class RttCounter : NetworkBehaviour
     /// </summary>
     private void OnReceiveMsgPong(ulong sender, FastBufferReader reader)
     {
-        reader.ReadValue(out int id);
+        int pingCount;
+        if (!reader.TryBeginRead(sizeof(int)))
+        {
+            throw new OverflowException("Not enough space in the buffer");
+        }
+        reader.ReadValue(out pingCount);
 
-        if (_msgSendTimes.TryGetValue(id, out float sendTime))
+        if (_msgSendTimes.TryGetValue(pingCount, out float sendTime))
         {
             float rtt = Time.realtimeSinceStartup - sendTime;
 
@@ -193,7 +206,7 @@ public class RttCounter : NetworkBehaviour
 
             Debug.Log($"Message RTT: {rtt * 1000f:0.0} ms | Avg {_messagePing * 1000f:0.0} ms");
 
-            _msgSendTimes.Remove(id);
+            _msgSendTimes.Remove(pingCount);
         }
     }
 }
