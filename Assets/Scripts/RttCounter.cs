@@ -54,6 +54,13 @@ public class RttCounter : NetworkBehaviour
         // De-register when the associated NetworkObject is despawned.
         NetworkManager.CustomMessagingManager.UnregisterNamedMessageHandler("msgpong");
         NetworkManager.CustomMessagingManager.UnregisterNamedMessageHandler("msgping");
+        _ping = 0;
+        _rtt = 0;
+        _messagePing = 0;
+        _timeAccumulator = 0;
+        _pingCount = 0;
+        _sendTimes.Clear();
+        _msgSendTimes.Clear();
     }
 
     private void Update()
