@@ -314,7 +314,10 @@ namespace Netcode.Transports.NearbyConnections
         public static NBCTransport Instance => s_instance;
         private static NBCTransport s_instance;
 
-        private static ILogger logger = Debug.unityLogger;
+        private static ILogger connectionLogger = Debug.unityLogger;
+        private static ILogger messageLogger = Debug.unityLogger;
+        [SerializeField] bool connectionLogging;
+        [SerializeField] bool messageLogging;
         private static string kTag = "NBC-Transport";
         private bool PermissionsReady
         {
@@ -325,7 +328,7 @@ namespace Netcode.Transports.NearbyConnections
                 {
                     if (!AndroidPermissionCheck.HasPermission(perm.Name))
                     {
-                        logger.LogWarning(kTag, $"Permission {perm.Name} granted=FALSE !");
+                        connectionLogger.LogWarning(kTag, $"Permission {perm.Name} granted=FALSE !");
                         return false;
                     }
                 }
@@ -494,12 +497,12 @@ namespace Netcode.Transports.NearbyConnections
 
                 default:
                     if (!s_instance._pendingAuthCodes.Remove(endpointId))
-                        logger.LogWarning(NBCTransport.kTag, "Couldn't find auth code for endpoint[" + endpointId + "]");
+                        connectionLogger.LogWarning(NBCTransport.kTag, "Couldn't find auth code for endpoint[" + endpointId + "]");
                     break;
             }
 
-            logger.Log(NBCTransport.kTag, "Name: " + s_instance._endpointNames[endpointId] + " EndpointId:" + endpointId + " Status: " + s_instance._endpointStatuses[endpointId]);
-            logger.Log(NBCTransport.kTag, "AuthDigits: " + authDigits + " AuthStatus: " + authStatus);
+            connectionLogger.Log(NBCTransport.kTag, "Name: " + s_instance._endpointNames[endpointId] + " EndpointId:" + endpointId + " Status: " + s_instance._endpointStatuses[endpointId]);
+            connectionLogger.Log(NBCTransport.kTag, "AuthDigits: " + authDigits + " AuthStatus: " + authStatus);
 
             s_instance.OnConnectingWithPeer?.InvokeOnMainThread(endpointId);
         }
@@ -510,7 +513,7 @@ namespace Netcode.Transports.NearbyConnections
         private static void OnConnectionEstablishedDelegate(string endpointId)
         {
             if (s_instance == null) return;
-            logger.Log(NBCTransport.kTag, "Established connection to endpoint " + endpointId + " with name " + s_instance.EndpointNames[endpointId] + " and transportId: " + s_instance._transportIds[endpointId]);
+            connectionLogger.Log(NBCTransport.kTag, "Established connection to endpoint " + endpointId + " with name " + s_instance.EndpointNames[endpointId] + " and transportId: " + s_instance._transportIds[endpointId]);
 
             s_instance.MainThreadInvokeOnTransportEvent(NetworkEvent.Connect,
                 s_instance._transportIds[endpointId], default);
@@ -571,7 +574,8 @@ namespace Netcode.Transports.NearbyConnections
                 s_instance = this;
             }
 
-            logger.logEnabled = true;
+            connectionLogger.logEnabled = connectionLogging;
+            messageLogger.logEnabled = messageLogging;
         }
 
         public void ConfigureNickname(string nickname)
@@ -614,7 +618,7 @@ namespace Netcode.Transports.NearbyConnections
         {
             if (!PermissionsReady)
             {
-                logger.LogError(NBCTransport.kTag,"Can't start transport, because necessary permissions haven't been granted by the user");
+                connectionLogger.LogError(NBCTransport.kTag,"Can't start transport, because necessary permissions haven't been granted by the user");
                 StartCoroutine(RequestPermissions());
                 return false;
             }
@@ -664,7 +668,7 @@ namespace Netcode.Transports.NearbyConnections
 
             if (_permissionDialogPrefab == null)
             {
-                logger.LogError(NBCTransport.kTag,"[Permissions] No permissionDialogPrefab assigned.");
+                connectionLogger.LogError(NBCTransport.kTag,"[Permissions] No permissionDialogPrefab assigned.");
                 return;
             }
 
@@ -675,7 +679,7 @@ namespace Netcode.Transports.NearbyConnections
             var controller = _activeDialog.GetComponent<PermissionDialogController>();
             if (controller == null)
             {
-                logger.LogError(NBCTransport.kTag,"[Permissions] PermissionDialogPrefab missing PermissionDialogController component.");
+                connectionLogger.LogError(NBCTransport.kTag,"[Permissions] PermissionDialogPrefab missing PermissionDialogController component.");
                 return;
             }
 
@@ -739,7 +743,7 @@ namespace Netcode.Transports.NearbyConnections
             if (!_isAdvertising)
             {
                 _endpointStatuses.Clear();
-                logger.Log(NBCTransport.kTag, "[NBC] StartAdvertising()");
+                connectionLogger.Log(NBCTransport.kTag, "[NBC] StartAdvertising()");
                 NBC_StartAdvertising(Nickname, ServiceId, (int)TypeOfConnection, LowPower, (int)Strategy);
                 _isAdvertising = true;
             }
@@ -759,7 +763,7 @@ namespace Netcode.Transports.NearbyConnections
             if (!_isBrowsing)
             {
                 _endpointNames.Clear();
-                logger.Log(NBCTransport.kTag, "[NBC] StartDiscovery()");
+                connectionLogger.Log(NBCTransport.kTag, "[NBC] StartDiscovery()");
                 NBC_StartDiscovery(ServiceId, LowPower, (int)Strategy);
                 _isBrowsing = true;
             }
@@ -778,7 +782,7 @@ namespace Netcode.Transports.NearbyConnections
         public void SendConnectionRequest(string endpointId)
         {
             // For Nearby, just initiate connection
-            logger.Log(NBCTransport.kTag, $"[NBC] Send connection request to {endpointId}");
+            connectionLogger.Log(NBCTransport.kTag, $"[NBC] Send connection request to {endpointId}");
             NBC_RequestConnection(Nickname, endpointId);
             _endpointStatuses[endpointId] = EndpointStatus.REQUESTED;
         }
@@ -806,12 +810,12 @@ namespace Netcode.Transports.NearbyConnections
         {
             if (_transportIds.ContainsKey(transportId))
             {
-                logger.Log(NBCTransport.kTag, "Sending " + data.Count + "bytes to " + _transportIds[transportId] + " with transportId: " + transportId);
+                messageLogger.Log(NBCTransport.kTag, "Sending " + data.Count + "bytes to " + _transportIds[transportId] + " with transportId: " + transportId);
                 NBC_SendBytes(_transportIds[transportId], data.Array, data.Count);
             }
             else
             {
-                logger.Log(NBCTransport.kTag, "Can't send " + data.Count + "bytes to endpoint with transportId: " + transportId + ". Key NOT persent in Transport Id Dictionary");
+                messageLogger.Log(NBCTransport.kTag, "Can't send " + data.Count + "bytes to endpoint with transportId: " + transportId + ". Key NOT persent in Transport Id Dictionary");
             }
         }
 
