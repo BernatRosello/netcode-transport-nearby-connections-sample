@@ -753,6 +753,7 @@ namespace Netcode.Transports.NearbyConnections
         {
             if (_isAdvertising)
             {
+                s_instance.RemoveUnconnectedEndpointData();
                 NBC_StopAdvertising();
                 _isAdvertising = false;
             }
@@ -773,6 +774,7 @@ namespace Netcode.Transports.NearbyConnections
         {
             if (_isBrowsing)
             {
+                s_instance.RemoveUnconnectedEndpointData();
                 NBC_StopDiscovery();
                 _isBrowsing = false;
                 _endpointNames.Clear();
@@ -825,6 +827,7 @@ namespace Netcode.Transports.NearbyConnections
         public override void DisconnectRemoteClient(ulong transportId)
         {
             NBC_Disconnect(_transportIds[transportId]);
+            RemoveEndpointData(_transportIds[transportId]);
         }
 
         private void RemoveEndpointData(string endpointId)
@@ -833,6 +836,14 @@ namespace Netcode.Transports.NearbyConnections
             _endpointNames.Remove(endpointId);
             _endpointStatuses.Remove(endpointId);
             _pendingAuthCodes.Remove(endpointId);
+        }
+
+        private void RemoveUnconnectedEndpointData()
+        {
+            foreach (var ep in _endpointStatuses.Where(kpv => kpv.Value != EndpointStatus.CONNECTED))
+            {
+                RemoveEndpointData(ep.Key);
+            }
         }
 
         // -------------------------------------------------------------------------------------
