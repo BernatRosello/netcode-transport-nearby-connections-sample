@@ -1,40 +1,46 @@
 using UnityEngine;
 using Unity.Netcode;
-using System.Collections.Generic;
 using Unity.Collections;
-using System;
+using System.Collections.Generic;
 
 public class RttCounter : NetworkBehaviour
 {
-    public float Rtt => _rtt * 1000f;
-    public float RpcPing => _ping * 1000f;
-    public float MessagePing => _messagePing * 1000f;   // NEW
+    // ----- Exposed values (ms) -----
+    public float RpcRttMs => _rpcRtt * 1000f;
+    public float MsgRttMs => _msgRtt * 1000f;
+    public float ClockDeltaMs => _clockDelta * 1000f;   // client clock vs host clock
 
-    private float _ping = 0f;               // RPC exponential moving average RTT
-    private float _messagePing = 0f;        // NEW: lightweight message RTT EMA
+    // ----- EMA values -----
+    private float _rpcRtt;
+    private float _msgRtt;
+    private float _clockDelta;
 
-    private int _pingCount = 0;
-    private float _timeAccumulator = 0f;
+    // Ping counters
+    private int _counter;
+    private float _tickTimer;
 
-    private float _rtt = 0f;
-    private Unity.Netcode.RpcParams myparams;
+    // Send timestamps
+    private readonly Dictionary<int, float> _rpcSendTimes = new();
+    private readonly Dictionary<int, float> _msgSendTimes = new();
 
-    // Track send times for each ping
-    private Dictionary<int, float> _sendTimes = new Dictionary<int, float>();
+    // EMA smoothing (0.1–0.3 recommended)
+    private const float Alpha = 0.2f;
 
-    // NEW: track lightweight message ping send times
-    private Dictionary<int, float> _msgSendTimes = new Dictionary<int, float>();
+    // Named message IDs
+    private const string MsgPing = "msgping";
+    private const string MsgPong = "msgpong";
 
-    // Smoothing factor for exponential moving average (0.1–0.3 recommended)
-    private const float alpha = 0.2f;
+    // ---------------------------------------------------------------------
+    // LIFECYCLE
+    // ---------------------------------------------------------------------
 
-    public override void OnNetworkSpawn()
+     public override void OnNetworkSpawn()
     {
         // Server registers handler for lightweight ping
         if (IsServer)
         {
             NetworkManager.CustomMessagingManager.RegisterNamedMessageHandler(
-                "msgping",
+                MsgPing,
                 OnReceiveMsgPing
             );
         }
@@ -43,7 +49,7 @@ public class RttCounter : NetworkBehaviour
         if (IsClient)
         {
             NetworkManager.CustomMessagingManager.RegisterNamedMessageHandler(
-                "msgpong",
+                MsgPong,
                 OnReceiveMsgPong
             );
         }
@@ -51,169 +57,150 @@ public class RttCounter : NetworkBehaviour
     
     public override void OnNetworkDespawn()
     {
-        // De-register when the associated NetworkObject is despawned.
-        NetworkManager.CustomMessagingManager.UnregisterNamedMessageHandler("msgpong");
-        NetworkManager.CustomMessagingManager.UnregisterNamedMessageHandler("msgping");
-        _ping = 0;
-        _rtt = 0;
-        _messagePing = 0;
-        _timeAccumulator = 0;
-        _pingCount = 0;
-        _sendTimes.Clear();
+        if (NetworkManager.Singleton.CustomMessagingManager != null)
+        {
+            // De-register when the associated NetworkObject is despawned.
+            if (IsServer) NetworkManager.CustomMessagingManager.UnregisterNamedMessageHandler(MsgPing);
+            if (IsClient) NetworkManager.CustomMessagingManager.UnregisterNamedMessageHandler(MsgPong);
+        }
+
+        _rpcSendTimes.Clear();
         _msgSendTimes.Clear();
     }
 
+    // ---------------------------------------------------------------------
+    // UPDATE LOOP
+    // ---------------------------------------------------------------------
+
     private void Update()
     {
-        if (IsSpawned && IsClient)
-        {
-            RequestRttServerRpc(Time.time);
-        }
+        // Only clients measure RTT to host
+        if (!IsClient || !IsSpawned || IsHost) return;
+
+        // Send one RTT batch per ~0.5s “network tick”
+        _tickTimer += Time.deltaTime;
+        if (_tickTimer < 0.5f) return;
+        _tickTimer = 0f;
+
+        _counter++;
+
+        // --- RPC RTT ---
+        _rpcSendTimes[_counter] = Time.realtimeSinceStartup;
+        PingRpc(_counter);
+
+        // --- Lightweight Message RTT ---
+        _msgSendTimes[_counter] = Time.realtimeSinceStartup;
+        SendMsgPing(_counter);
+
+        // --- Clock delta (one way, NOT RTT) ---
+        RequestClockDeltaServerRpc(NetworkManager.LocalTime.TimeAsFloat);
     }
 
-    [Rpc(SendTo.Server, InvokePermission = RpcInvokePermission.Everyone)]
-    private void RequestRttServerRpc(float clientTimestamp, RpcParams rpcParams = default)
+    // ---------------------------------------------------------------------
+    // 1) RPC RTT
+    // ---------------------------------------------------------------------
+
+    [Rpc(SendTo.Server)]
+    private void PingRpc(int id, RpcParams rpcParams = default)
     {
-        RespondRttClientRpc(clientTimestamp, RpcTarget.Single(rpcParams.Receive.SenderClientId, RpcTargetUse.Temp));
+        // Respond directly back to originating client
+        PongRpc(id, RpcTarget.Single(rpcParams.Receive.SenderClientId, RpcTargetUse.Temp));
     }
 
     [Rpc(SendTo.SpecifiedInParams)]
-    private void RespondRttClientRpc(float clientTimestamp, RpcParams rpcParams = default)
+    private void PongRpc(int id, RpcParams _ = default)
     {
-        _rtt = (Time.time - clientTimestamp) * 1000f;
-        _rtt = (NetworkManager.Singleton.LocalTime - NetworkManager.Singleton.ServerTime).TimeAsFloat;
+        if (!_rpcSendTimes.TryGetValue(id, out float sent)) return;
 
-        _timeAccumulator += Time.deltaTime;
+        float rtt = Time.realtimeSinceStartup - sent;
+        _rpcRtt = (_rpcRtt == 0f) ? rtt : Mathf.Lerp(_rpcRtt, rtt, Alpha);
+        _rpcSendTimes.Remove(id);
 
-        // ------------------------------
-        // Existing RPC ping (unchanged)
-        // ------------------------------
-        if (_timeAccumulator > 0.5f)
-        {
-            _timeAccumulator = 0f;
-            _pingCount++;
-
-            _sendTimes[_pingCount] = Time.realtimeSinceStartup;
-            _msgSendTimes[_pingCount] = Time.realtimeSinceStartup;
-
-            PingRpc(_pingCount, default);
-            SendMsgPing(_pingCount);
-        }
+        // Debug UI
+        // Debug.Log($"RPC RTT: {_rpcRtt * 1000f:0.0} ms");
     }
 
-    // =====================================================
-    //  RPC PING (UNCHANGED)
-    // =====================================================
+    // ---------------------------------------------------------------------
+    // 2) LIGHTWEIGHT MESSAGE RTT
+    // ---------------------------------------------------------------------
 
-    [Rpc(SendTo.Server)]
-    public void PingRpc(int pingCount, RpcParams rpcParams)
+    private void SendMsgPing(int id)
     {
-        PongRpc(
-            pingCount,
-            "PONG!",
-            RpcTarget.Single(rpcParams.Receive.SenderClientId, RpcTargetUse.Temp)
+        using var writer = new FastBufferWriter(sizeof(int), Allocator.Temp);
+        if(!writer.TryBeginWrite(sizeof(int)))
+        {
+            throw new System.OverflowException("Not enough space in the buffer");
+        }
+        writer.WriteValue(id);
+
+        NetworkManager.CustomMessagingManager.SendNamedMessage(
+            MsgPing,
+            NetworkManager.ServerClientId,        // always host
+            writer,
+            NetworkDelivery.Unreliable
         );
     }
 
-    [Rpc(SendTo.SpecifiedInParams)]
-    void PongRpc(int pingCount, string message, RpcParams rpcParams)
-    {
-        if (_sendTimes.TryGetValue(pingCount, out float sendTime))
-        {
-            float rtt = Time.realtimeSinceStartup - sendTime;
-
-            _ping = (_ping == 0f) ? rtt : alpha * rtt + (1f - alpha) * _ping;
-
-            Debug.Log($"RPC RTT: {rtt * 1000f:0.0} ms | Avg {_ping * 1000f:0.0} ms");
-
-            _sendTimes.Remove(pingCount);
-        }
-        else
-        {
-            Debug.LogWarning($"Received pong for unknown RPC ping {pingCount}");
-        }
-    }
-
-    // =====================================================
-    //  NEW: LIGHTWEIGHT MESSAGE PING
-    // =====================================================
-
-    /// <summary>
-    /// Client → Server: send unmanaged unreliable ping
-    /// </summary>
-    private void SendMsgPing(int pingCount)
-    {
-        var manager = NetworkManager.Singleton.CustomMessagingManager;
-
-        using (var writer = new FastBufferWriter(sizeof(int), Allocator.Temp))
-        {
-            if(!writer.TryBeginWrite(sizeof(int)))
-            {
-                throw new OverflowException("Not enough space in the buffer");
-            }
-            writer.WriteValue(pingCount);
-            manager.SendNamedMessage(
-                "msgping",
-                NetworkManager.ServerClientId,
-                writer,
-                NetworkDelivery.Unreliable
-            );
-        }
-    }
-
-    /// <summary>
-    /// Server receives messagePing. Immediately sends msgpong back.
-    /// </summary>
     private void OnReceiveMsgPing(ulong sender, FastBufferReader reader)
     {
-        int pingCount;
-        if (!reader.TryBeginRead(sizeof(int)))
+        if(!reader.TryBeginRead(sizeof(int)))
         {
-            throw new OverflowException("Not enough space in the buffer");
+            throw new System.OverflowException("Not enough space in the reader buffer");
         }
-        reader.ReadValue(out pingCount);
+        reader.ReadValue(out int id);
 
-        var manager = NetworkManager.Singleton.CustomMessagingManager;
-
-        using (var writer = new FastBufferWriter(sizeof(int), Allocator.Temp))
+        using var writer = new FastBufferWriter(sizeof(int), Allocator.Temp);
+        if(!writer.TryBeginWrite(sizeof(int)))
         {
-            if(!writer.TryBeginWrite(sizeof(int)))
-            {
-                throw new OverflowException("Not enough space in the buffer");
-            }
-            writer.WriteValue(pingCount);
-            manager.SendNamedMessage(
-                "msgpong",
-                sender,
-                writer,
-                NetworkDelivery.Unreliable
-            );
+            throw new System.OverflowException("Not enough space in the writer buffer");
         }
+        writer.WriteValue(id);
+
+        NetworkManager.CustomMessagingManager.SendNamedMessage(
+            MsgPong,
+            sender,
+            writer,
+            NetworkDelivery.Unreliable
+        );
     }
 
-    /// <summary>
-    /// Client receives msgpong and computes lightweight RTT
-    /// </summary>
     private void OnReceiveMsgPong(ulong sender, FastBufferReader reader)
     {
-        int pingCount;
-        if (!reader.TryBeginRead(sizeof(int)))
+        if(!reader.TryBeginRead(sizeof(int)))
         {
-            throw new OverflowException("Not enough space in the buffer");
+            throw new System.OverflowException("Not enough space in the reader buffer");
         }
-        reader.ReadValue(out pingCount);
+        reader.ReadValue(out int id);
 
-        if (_msgSendTimes.TryGetValue(pingCount, out float sendTime))
-        {
-            float rtt = Time.realtimeSinceStartup - sendTime;
+        if (!_msgSendTimes.TryGetValue(id, out float sent)) return;
 
-            _messagePing = (_messagePing == 0f)
-                ? rtt
-                : alpha * rtt + (1f - alpha) * _messagePing;
+        float rtt = Time.realtimeSinceStartup - sent;
+        _msgRtt = (_msgRtt == 0f) ? rtt : Mathf.Lerp(_msgRtt, rtt, Alpha);
 
-            Debug.Log($"Message RTT: {rtt * 1000f:0.0} ms | Avg {_messagePing * 1000f:0.0} ms");
+        _msgSendTimes.Remove(id);
 
-            _msgSendTimes.Remove(pingCount);
-        }
+        // Debug UI
+        // Debug.Log($"Message RTT: {_msgRtt * 1000f:0.0} ms");
+    }
+
+    // ---------------------------------------------------------------------
+    // 3) CLOCK DELTA (one way, not RTT)
+    // ---------------------------------------------------------------------
+
+    [Rpc(SendTo.Server)]
+    private void RequestClockDeltaServerRpc(float clientTime, RpcParams rpcParams = default)
+    {
+        RespondClockDeltaClientRpc(clientTime, NetworkManager.ServerTime.TimeAsFloat,
+            RpcTarget.Single(rpcParams.Receive.SenderClientId, RpcTargetUse.Temp));
+    }
+
+    [Rpc(SendTo.SpecifiedInParams)]
+    private void RespondClockDeltaClientRpc(float clientSent, float hostTime, RpcParams _ = default)
+    {
+        float now = NetworkManager.LocalTime.TimeAsFloat;
+        float oneWay = (now - clientSent) * 0.5f;     // estimate
+
+        float delta = (hostTime + oneWay) - now;
+        _clockDelta = (_clockDelta == 0f) ? delta : Mathf.Lerp(_clockDelta, delta, Alpha);
     }
 }

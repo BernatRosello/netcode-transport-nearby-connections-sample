@@ -260,7 +260,6 @@ namespace Netcode.Transports.NearbyConnections
         public enum EndpointStatus
         {
             UNINITIALIZED,
-            IDLE,
             ADVERTISING,
             DISCOVERING,
             REQUESTING,
@@ -314,17 +313,19 @@ namespace Netcode.Transports.NearbyConnections
         public static NBCTransport Instance => s_instance;
         private static NBCTransport s_instance;
 
-        private static ILogger connectionLogger = Debug.unityLogger;
-        private static ILogger messageLogger = Debug.unityLogger;
+        private static ILogger connectionLogger = new Logger(Debug.unityLogger.logHandler);
+        private static ILogger messageLogger = new Logger(Debug.unityLogger.logHandler);
+        private static ILogger internalLogger = new Logger(Debug.unityLogger.logHandler);
         [SerializeField] bool connectionLogging;
         [SerializeField] bool messageLogging;
+        [SerializeField] bool internalLogging;
         private static string kTag = "NBC-Transport";
         private bool PermissionsReady
         {
             get
             {
 #if UNITY_ANDROID //&& !UNITY_EDITOR
-                foreach(var perm in NearbyPermissionDefinitions.Permissions)
+                foreach (var perm in NearbyPermissionDefinitions.Permissions)
                 {
                     if (!AndroidPermissionCheck.HasPermission(perm.Name))
                     {
@@ -447,7 +448,7 @@ namespace Netcode.Transports.NearbyConnections
             if (s_instance._transportIds.ContainsKey(endpointId))
             {
                 s_instance.RemoveEndpointData(endpointId);
-            } 
+            }
             s_instance._transportIds.AddServer(endpointId);
             s_instance._endpointNames.Add(endpointId, name);
             s_instance._endpointStatuses.Add(endpointId, EndpointStatus.ADVERTISING);
@@ -484,7 +485,7 @@ namespace Netcode.Transports.NearbyConnections
                     {
                         if (s_instance._transportIds.ContainsKey(endpointId))
                         {
-                        // The Advertiser, however, shouldn't know of the client up until this point.
+                            // The Advertiser, however, shouldn't know of the client up until this point.
                             connectionLogger.LogWarning(NBCTransport.kTag, $"ADVERTISER: Reported peer found for already known peer {endpointId} (after completing connection initiation).");
                             return;
                         }
@@ -532,9 +533,9 @@ namespace Netcode.Transports.NearbyConnections
         {
             if (s_instance == null) return;
             if (!s_instance._transportIds.ContainsKey(endpointId))
-                            // means the peer disconnected before we could complete the location process locally.
-                            // We must halt any connection attempt/communication.
-                            return;
+                // means the peer disconnected before we could complete the location process locally.
+                // We must halt any connection attempt/communication.
+                return;
 
             connectionLogger.Log(NBCTransport.kTag, "Established connection to endpoint " + endpointId + " with name " + s_instance.EndpointNames[endpointId] + " and transportId: " + s_instance._transportIds[endpointId]);
 
@@ -599,6 +600,7 @@ namespace Netcode.Transports.NearbyConnections
 
             connectionLogger.logEnabled = connectionLogging;
             messageLogger.logEnabled = messageLogging;
+            internalLogger.logEnabled = internalLogging;
         }
 
         public void ConfigureNickname(string nickname)
@@ -635,13 +637,18 @@ namespace Netcode.Transports.NearbyConnections
             NBC_SetOnConnectionEstablished(OnConnectionEstablishedDelegate);
             NBC_SetOnConnectionDisconnected(OnConnectionDisconnectedDelegate);
             NBC_SetOnPayloadReceived(OnPayloadReceivedDelegate);
+
+            // Network stuff
+
+            // Configure MTU https://developers.google.com/android/reference/com/google/android/gms/nearby/connection/ConnectionsClient#constants
+            NetworkManager.Singleton.MaximumTransmissionUnitSize = 1047552;
         }
 
         public override bool StartServer()
         {
             if (!PermissionsReady)
             {
-                connectionLogger.LogError(NBCTransport.kTag,"Can't start transport, because necessary permissions haven't been granted by the user");
+                connectionLogger.LogError(NBCTransport.kTag, "Can't start transport, because necessary permissions haven't been granted by the user");
                 StartCoroutine(RequestPermissions());
                 return false;
             }
@@ -691,7 +698,7 @@ namespace Netcode.Transports.NearbyConnections
 
             if (_permissionDialogPrefab == null)
             {
-                connectionLogger.LogError(NBCTransport.kTag,"[Permissions] No permissionDialogPrefab assigned.");
+                connectionLogger.LogError(NBCTransport.kTag, "[Permissions] No permissionDialogPrefab assigned.");
                 return;
             }
 
@@ -702,7 +709,7 @@ namespace Netcode.Transports.NearbyConnections
             var controller = _activeDialog.GetComponent<PermissionDialogController>();
             if (controller == null)
             {
-                connectionLogger.LogError(NBCTransport.kTag,"[Permissions] PermissionDialogPrefab missing PermissionDialogController component.");
+                connectionLogger.LogError(NBCTransport.kTag, "[Permissions] PermissionDialogPrefab missing PermissionDialogController component.");
                 return;
             }
 
@@ -859,13 +866,19 @@ namespace Netcode.Transports.NearbyConnections
             _endpointNames.Remove(endpointId);
             _endpointStatuses.Remove(endpointId);
             _pendingAuthCodes.Remove(endpointId);
+
+            internalLogger.Log($"Removed enpoint data for endpoint[{endpointId}]");
         }
 
         private void RemoveUnconnectedEndpointData()
         {
-            foreach (var ep in _endpointStatuses.Where(kpv => kpv.Value != EndpointStatus.CONNECTED))
+            foreach (var ep in GetEndpointsByStatus(EndpointStatus.UNINITIALIZED,
+                                                    EndpointStatus.ADVERTISING,
+                                                    EndpointStatus.DISCOVERING,
+                                                    EndpointStatus.REQUESTED,
+                                                    EndpointStatus.REQUESTING))
             {
-                RemoveEndpointData(ep.Key);
+                RemoveEndpointData(ep.id);
             }
         }
 

@@ -5,12 +5,15 @@
 
 using UnityEngine;
 using TMPro;
+using Unity.Netcode;
+using Unity.Mathematics;
 
 public class RttDisplay : MonoBehaviour
 {
     [SerializeField] private RttCounter _rttCounter;
 
-    [SerializeField] private TMP_Text _rttText;
+    [SerializeField] private TMP_Text _networkTickRateText;
+    [SerializeField] private TMP_Text _clockDelta;
     [SerializeField] private TMP_Text _rpcPingText;
     [SerializeField] private TMP_Text _msgPingText;
 
@@ -20,8 +23,9 @@ public class RttDisplay : MonoBehaviour
 
     private void Update()
     {
-        _rttText.text = $"server/local time diff: {_rttCounter.Rtt:F4} ms";
-        _rpcPingText.text = $"rpc ping: {_rttCounter.RpcPing:F4} ms";
-        _msgPingText.text = $"msg ping: {_rttCounter.MessagePing:F4} ms";
+        _networkTickRateText.text = $"tick rate: {NetworkManager.Singleton.NetworkTickSystem.TickRate} tps ({1000.0/NetworkManager.Singleton.NetworkTickSystem.TickRate:F4} ms)";
+        _clockDelta.text = $"clock delta: {_rttCounter.ClockDeltaMs:F4} ms";
+        _rpcPingText.text = $"rpc ping: {_rttCounter.RpcRttMs/2.0:F4} ms";
+        _msgPingText.text = $"msg ping: {_rttCounter.MsgRttMs/2.0:F4} ms";
     }
 }
