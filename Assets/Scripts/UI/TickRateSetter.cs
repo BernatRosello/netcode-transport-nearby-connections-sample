@@ -6,6 +6,12 @@ using TMPro;
 public class TickRateSetter : MonoBehaviour
 {
     [SerializeField] TMP_InputField _inputField;
+
+    void Start()
+    {
+        ReadTickRate();
+    }
+
     public void ChangeTickRate(string newTickRate)
     {
         uint rate = 0;

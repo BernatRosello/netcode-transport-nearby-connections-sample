@@ -2,7 +2,6 @@
 #
 # Get latest from https://github.com/github/gitignore/blob/main/Unity.gitignore
 #
-.utmp/
 /[Ll]ibrary/
 /[Tt]emp/
 /[Oo]bj/
@@ -183,3 +182,5 @@ Assets/NMLBuildCache
 Assets/StreamingAssets
 ProjectSettings/EditorBuildSettings.asset
 Assets/NMLBuildCache.meta
+
+.utmp/

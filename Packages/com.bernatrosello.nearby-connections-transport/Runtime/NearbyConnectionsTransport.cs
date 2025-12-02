@@ -354,6 +354,7 @@ namespace Netcode.Transports.NearbyConnections
 
         [SerializeField, Tooltip("This will be the connection strategy used in the P2P Nearby network.")]
         private ConnectionStrategy _configConnectionStrategy = ConnectionStrategy.P2P_STAR;
+        public ConnectionStrategy ConfiguredConnectionStrategy => _configConnectionStrategy;
 
         public string ServiceId => _sessionData.serviceId;
         public string Nickname => _sessionData.name;
