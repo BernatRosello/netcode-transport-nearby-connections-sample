@@ -113,8 +113,8 @@ namespace Netcode.Transports.NearbyConnections
                 new("android.permission.BLUETOOTH",         maxSdk: "30"),
                 new("android.permission.BLUETOOTH_ADMIN",   maxSdk: "30"),
 
-                new("android.permission.ACCESS_COARSE_LOCATION",  maxSdk: "28"),
-                new("android.permission.ACCESS_FINE_LOCATION",    minSdk: "29", maxSdk: "31", runtimePerm: true),
+                new("android.permission.ACCESS_COARSE_LOCATION"),//,  maxSdk: "28"),
+                new("android.permission.ACCESS_FINE_LOCATION", runtimePerm: true),//,    minSdk: "29", maxSdk: "31", runtimePerm: true),
 
                 // Android 12+ Bluetooth permissions
                 new("android.permission.BLUETOOTH_SCAN",        minSdk: "31", runtimePerm: true),
@@ -444,7 +444,10 @@ namespace Netcode.Transports.NearbyConnections
         private static void OnDiscoveryPeerFoundDelegate(string endpointId, string name)
         {
             if (s_instance == null) return;
-
+            if (s_instance._transportIds.ContainsKey(endpointId))
+            {
+                s_instance.RemoveEndpointData(endpointId);
+            } 
             s_instance._transportIds.AddServer(endpointId);
             s_instance._endpointNames.Add(endpointId, name);
             s_instance._endpointStatuses.Add(endpointId, EndpointStatus.ADVERTISING);
@@ -470,6 +473,7 @@ namespace Netcode.Transports.NearbyConnections
         private static void OnConnectionInitiatedDelegate(string endpointId, string name, string authDigits, int authStatus)
         {
             if (s_instance == null) return;
+
             switch (authStatus)
             {
                 case 0:
@@ -478,6 +482,12 @@ namespace Netcode.Transports.NearbyConnections
                     // As advertisers we only get to see the peer upon them requesting a connections, so this is where we register their info
                     if (s_instance._isAdvertising)
                     {
+                        if (s_instance._transportIds.ContainsKey(endpointId))
+                        {
+                        // The Advertiser, however, shouldn't know of the client up until this point.
+                            connectionLogger.LogWarning(NBCTransport.kTag, $"ADVERTISER: Reported peer found for already known peer {endpointId} (after completing connection initiation).");
+                            return;
+                        }
                         s_instance.EndpointNames.Add(endpointId, name);
                         s_instance.EndpointStatuses.Add(endpointId, EndpointStatus.REQUESTING);
                         s_instance._transportIds.Add(endpointId);
@@ -486,6 +496,13 @@ namespace Netcode.Transports.NearbyConnections
                     }
                     else if (s_instance._isBrowsing)
                     {
+                        if (!s_instance._transportIds.ContainsKey(endpointId))
+                        {
+                            // means the peer disconnected before we could complete the location process locally.
+                            // We must halt any connection attempt/communication at the browser (LOST PEER).
+                            connectionLogger.LogWarning(NBCTransport.kTag, $"BROWSER: Lost connection with peer {endpointId} before completing connection initiation.");
+                            return;
+                        }
                         s_instance._endpointStatuses[endpointId] = EndpointStatus.REQUESTED;
                         s_instance.OnBrowserSentConnectionRequest?.InvokeOnMainThread(endpointId, name);
                     }
@@ -514,6 +531,11 @@ namespace Netcode.Transports.NearbyConnections
         private static void OnConnectionEstablishedDelegate(string endpointId)
         {
             if (s_instance == null) return;
+            if (!s_instance._transportIds.ContainsKey(endpointId))
+                            // means the peer disconnected before we could complete the location process locally.
+                            // We must halt any connection attempt/communication.
+                            return;
+
             connectionLogger.Log(NBCTransport.kTag, "Established connection to endpoint " + endpointId + " with name " + s_instance.EndpointNames[endpointId] + " and transportId: " + s_instance._transportIds[endpointId]);
 
             s_instance.MainThreadInvokeOnTransportEvent(NetworkEvent.Connect,
