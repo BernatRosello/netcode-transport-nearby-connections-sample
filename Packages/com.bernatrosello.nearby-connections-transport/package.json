@@ -1,7 +1,7 @@
 {
   "name": "com.bernatrosello.nearby-connections-transport",
   "version": "1.0.0",
-  "displayName": "Neraby Connections Transport",
+  "displayName": "Nearby Connections Transport",
   "description": "A custom transport implementation with Nearby Connections for Unity Netcode for GameObjects.",
   "unity": "6000.2",
   "dependencies": {
@@ -15,9 +15,9 @@
     "android"
   ],
   "author": {
-    "name": "Your Name",
-    "email": "your-email@company.com",
-    "url": "https://yourwebsite.com"
+    "name": "Bernat Roselló Muñoz",
+    "email": "bernatrosello@gmail.com",
+    "url": "PLACEHOLDER_URL"
   },
   "hideInEditor": false
 }
