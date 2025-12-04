@@ -453,6 +453,7 @@ namespace Netcode.Transports.NearbyConnections
             if (s_instance == null) return;
             if (s_instance._transportIds.ContainsKey(endpointId))
             {
+                internalLogger.LogWarning(kTag, $"Yeah this endpoint[{endpointId}] was already registered, but it's probably a bug so pls look into it. Proceeding to remove endpoint data and RE-Register it...");
                 s_instance.RemoveEndpointData(endpointId);
             }
             s_instance._transportIds.AddServer(endpointId);
@@ -526,8 +527,9 @@ namespace Netcode.Transports.NearbyConnections
                     break;
             }
 
-            connectionLogger.Log(NBCTransport.kTag, "Name: " + s_instance._endpointNames[endpointId] + " EndpointId:" + endpointId + " Status: " + s_instance._endpointStatuses[endpointId]);
-            connectionLogger.Log(NBCTransport.kTag, "AuthDigits: " + authDigits + " AuthStatus: " + authStatus);
+            //connectionLogger.Log(NBCTransport.kTag, "Name: " + s_instance._endpointNames[endpointId] + " EndpointId:" + endpointId + " Status: " + s_instance._endpointStatuses[endpointId]);
+            connectionLogger.Log(NBCTransport.kTag, (s_instance._transportIds.ContainsKey(endpointId) ? "Registered" : "UNREGISTERED[!]") +
+                $"EndpointId: {endpointId} Name: {name} AuthDigits: {authDigits} AuthStatus: {authStatus}");
 
             s_instance.OnConnectingWithPeer?.InvokeOnMainThread(endpointId);
         }
@@ -551,20 +553,19 @@ namespace Netcode.Transports.NearbyConnections
         [AOT.MonoPInvokeCallback(typeof(OnConnectionDisconnectedCallback))]
         private static void OnConnectionDisconnectedDelegate(string endpointId)
         {
+            internalLogger.Log(kTag, $"Called OnConnectionDisconnectedDelegate on endpoint[{endpointId}]");
             if (s_instance == null) return;
 
             if (s_instance._transportIds.ContainsKey(endpointId))
             {
+                connectionLogger.Log(NBCTransport.kTag, $"Disconnecting from endpoint {endpointId} with name {s_instance.EndpointNames[endpointId]} and transportId: {s_instance._transportIds[endpointId]} and status: {s_instance._endpointStatuses[endpointId]}");
                 if (s_instance._endpointStatuses[endpointId] == EndpointStatus.CONNECTED)
                 {
                     s_instance.MainThreadInvokeOnTransportEvent(NetworkEvent.Disconnect,
                         s_instance._transportIds[endpointId], default);
                 }
                 s_instance.RemoveEndpointData(endpointId);
-                connectionLogger.Log(NBCTransport.kTag, $"Disconnected endpoint {endpointId} with name {s_instance.EndpointNames[endpointId]} and transportId: {s_instance._transportIds[endpointId]} and status: {s_instance._endpointStatuses[endpointId]}");
             }
-
-            connectionLogger.Log(NBCTransport.kTag, $"Disconnected UNREGISTERED endpoint {endpointId}");
         }
 
         [AOT.MonoPInvokeCallback(typeof(OnPayloadReceivedCallback))]
@@ -681,7 +682,12 @@ namespace Netcode.Transports.NearbyConnections
 
         public override void Shutdown()
         {
+            // Manage transitory state connections (since these aren't handled by either NBC or NGO in away that produces events
+            // * Removing connected endpoints is not necessary since those will be Disconnected through the NGO control flow,
+            // and dealt with as usual.
             NBC_Shutdown();
+            RemoveAllEndpointsData();
+
             _sessionData = null;
             _isAdvertising = false;
             _isBrowsing = false;
@@ -832,7 +838,7 @@ namespace Netcode.Transports.NearbyConnections
         {
             if (s_instance.IsAdvertising)
                 s_instance.OnAdvertiserApprovedConnectionRequest?.Invoke(endpointId);
-                
+
             if (s_instance.IsBrowsing)
                 s_instance.OnBrowserApprovedConnectionRequest?.Invoke(endpointId);
             NBC_AcceptConnection(endpointId);
@@ -874,8 +880,8 @@ namespace Netcode.Transports.NearbyConnections
                 var epId = _transportIds[transportId];
                 //if (_endpointStatuses[epId] != EndpointStatus.CONNECTED)
                 //    connectionLogger.LogWarning(kTag, $"Tried to disconnect client with transportId[{transportId}], but its status was [{_endpointStatuses[epId]}] not CONNECTED!");
+                connectionLogger.LogWarning(kTag, $"Calling NBC to disconnect client with transportId[{transportId}]");
                 NBC_Disconnect(epId);
-                RemoveEndpointData(epId);
             }
             else
             {
@@ -890,7 +896,7 @@ namespace Netcode.Transports.NearbyConnections
             _endpointStatuses.Remove(endpointId);
             _pendingAuthCodes.Remove(endpointId);
 
-            internalLogger.Log($"Removed enpoint data for endpoint[{endpointId}]");
+            internalLogger.Log($"Removed endpoint data for endpoint[{endpointId}]");
         }
 
         private void RemoveUnconnectedEndpointData()
@@ -902,6 +908,21 @@ namespace Netcode.Transports.NearbyConnections
                                                     EndpointStatus.REQUESTING))
             {
                 RemoveEndpointData(ep.id);
+            }
+        }
+
+        private void RemoveAllEndpointsData()
+        {
+            foreach(var ep in GetAllEndpoints())
+            {
+                RemoveEndpointData(ep.id);
+            }
+            if (_transportIds.Count > 0 ||
+                _endpointNames.Count > 0 ||
+                _endpointStatuses.Count > 0 ||
+                _pendingAuthCodes.Count > 0)
+            {
+                internalLogger.LogError(kTag, "FATAL: unexpected remanants of unregistered endpoints' data in internal dicitonaries!");
             }
         }
 
@@ -944,5 +965,8 @@ namespace Netcode.Transports.NearbyConnections
         /// The first parameter is the name of the connecting peer.
         /// </summary>
         public event Action<string> OnConnectingWithPeer;
+
+        //TODO: Define what this action exactly means
+        public event Action<string> OnPeerDisconnected;
     }
 }

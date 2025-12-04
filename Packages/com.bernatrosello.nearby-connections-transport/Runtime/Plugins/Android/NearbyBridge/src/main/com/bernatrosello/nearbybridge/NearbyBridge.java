@@ -24,27 +24,20 @@ public class NearbyBridge {
     private static native void nativeOnPayloadReceived(String endpointId, byte[] data);
 
     static {
-        // ensure the library name matches the built .so (strip lib prefix and .so)
-        // if you build libnc_unity.so -> loadLibrary("nc_unity")
         System.loadLibrary("nc_unity");
     }
 
-    // Called from native to initialize with Unity activity.
     public static void initialize(Activity unityActivity) {
         sActivity = unityActivity;
         if (sClient == null && sActivity != null) {
             sClient = Nearby.getConnectionsClient(sActivity);
             // DEBUG
-            Log.d(TAG, "initialize: Successfully fetched ConnectionsClient");
         } else {
             Log.w(TAG, "Could not fetch Nearby Connections Client: " + (sClient != null ? "Because client was already fetched (no need to fetch again)." : "Because the passed Activity is null."));
         }
     }
 
-    // convenience overload used by native that passes serviceId string
     public static void initialize() {
-        // called from native with serviceId as parameter.
-        // We need an Activity: get it from UnityPlayer.currentActivity if not provided by Unity
         try {
             Class<?> unityPlayer = Class.forName("com.unity3d.player.UnityPlayer");
             Activity activity = (Activity) unityPlayer.getField("currentActivity").get(null);
@@ -60,9 +53,8 @@ public class NearbyBridge {
             sClient.stopAdvertising();
             sClient.stopDiscovery();
             sClient = null;
-            Log.d(TAG, "shutdown: ConnectionsClient cleared and all endpoints stopped.");
         } else {
-            Log.w(TAG, "shutdown called but sClient was already null");
+            Log.w(TAG, "shutdown: attempted but sClient is already null.");
         }
     }
 
@@ -73,19 +65,19 @@ public class NearbyBridge {
             return;
         }
         DiscoveryOptions options = new DiscoveryOptions.Builder()
-        .setLowPower(lowPower)
-        .setStrategy(IntToStrategy(strategy))
-        .build();
+                .setLowPower(lowPower)
+                .setStrategy(IntToStrategy(strategy))
+                .build();
         sClient.startDiscovery(serviceId, endpointDiscoveryCallback, options)
                 .addOnSuccessListener(unused -> Log.d(TAG, "Discovery started"))
-            .addOnFailureListener(e -> Log.e(TAG, "DISCOVERY FAILED! TODO: implement callback into NBC-Transport to notify of failure...", e));
+                .addOnFailureListener(e -> Log.e(TAG, "DISCOVERY FAILED! TODO: implement callback into NBC-Transport to notify of failure...", e));
     }
 
     public static void stopDiscovery() {
         if (sClient != null) {
             sClient.stopDiscovery();
         } else {
-            Log.w(TAG, "stopDiscovery: attempted but client is null");
+            Log.w(TAG, "stopDiscovery: attempted but sClient is null.");
         }
     }
 
@@ -95,10 +87,10 @@ public class NearbyBridge {
             return;
         }
         AdvertisingOptions options = new AdvertisingOptions.Builder()
-            .setConnectionType(connectionType)
-            .setLowPower(lowPower)
-            .setStrategy(IntToStrategy(strategy))
-            .build();
+                .setConnectionType(connectionType)
+                .setLowPower(lowPower)
+                .setStrategy(IntToStrategy(strategy))
+                .build();
         sClient.startAdvertising(endpointName, serviceId, connectionLifecycleCallback, options)
                 .addOnSuccessListener(unused -> Log.d(TAG, "Advertising started"))
                 .addOnFailureListener(e -> Log.e(TAG, "ADVERTISING FAILED! TODO: implement callback into NBC-Transport to notify of failure...", e));
@@ -108,7 +100,7 @@ public class NearbyBridge {
         if (sClient != null) {
             sClient.stopAdvertising();
         } else {
-            Log.w(TAG, "stopAdvertising: attempted but client is null");
+            Log.w(TAG, "stopAdvertising: attempted but sClient is null.");
         }
     }
     
@@ -121,8 +113,6 @@ public class NearbyBridge {
     }
 
     public static void acceptConnection(String endpointId) {
-        // we used hashCode() for ID mapping — we need to map back to endpointId string.
-        // This simple implementation scans endpoints map to find matching hash. Not ideal for collisions.
         if (sClient != null) {
             Log.d(TAG, "Accepting connection to endpoint["+endpointId+"]");
             sClient.acceptConnection(endpointId, payloadCallback);
@@ -136,7 +126,7 @@ public class NearbyBridge {
             Log.d(TAG, "Rejecting connection to endpoint["+endpointId+"]");
             sClient.rejectConnection(endpointId);
         } else {
-            Log.w(TAG, "rejectConnection: sClient null for endpoint["+endpointId+"]");
+            Log.w(TAG, "rejectConnection: sClient null for endpoint [" + endpointId + "]");
         }
     }
 
@@ -145,7 +135,7 @@ public class NearbyBridge {
             Log.d(TAG, "Disconnecting from endpoint["+endpointId+"]");
             sClient.disconnectFromEndpoint(endpointId);
         } else {
-            Log.w(TAG, "disconnect: sClient null for endpoint["+endpointId+"]");
+            Log.w(TAG, "disconnect: sClient null for endpoint [" + endpointId + "]");
         }
     }
 
@@ -153,7 +143,7 @@ public class NearbyBridge {
         if (endpointId != null && sClient != null) {
             sClient.sendPayload(endpointId, Payload.fromBytes(data));
         } else {
-            Log.w(TAG, "sendBytes: endpoint not found or sClient null");
+            Log.w(TAG, "sendBytes: endpoint or sClient null (" + endpointId + ")");
         }
     }
 
@@ -161,7 +151,7 @@ public class NearbyBridge {
         if (endpointIds != null && sClient != null) {
             sClient.sendPayload(endpointIds, Payload.fromBytes(data));
         } else {
-            Log.w(TAG, "sendBytes: endpoint list not found or sClient null");
+            Log.w(TAG, "sendBytes: endpoints or sClient null");
         }
     }
 
@@ -182,19 +172,16 @@ public class NearbyBridge {
     private static final PayloadCallback payloadCallback = new PayloadCallback() {
         @Override
         public void onPayloadReceived(String endpointId, Payload payload) {
-            //Log.d(TAG, "Endpoint["+endpointId+"]<= Payload["+ payload.getId() +"]");
             if (payload.getType() == Payload.Type.BYTES) {
                 byte[] b = payload.asBytes();
                 nativeOnPayloadReceived(endpointId, b);
             } else {
-                // streaming / file payloads can be supported here
                 Log.e(TAG, "Payload["+payload.getId()+"] Type:" + payload.getType() + " unsupported by NearbyBridge");
             }
         }
 
         @Override
         public void onPayloadTransferUpdate(String endpointId, PayloadTransferUpdate payloadUpdate) {
-            //Log.d(TAG, "Endpoint["+endpointId+"]<= Payload[" + payloadUpdate.getPayloadId() + "] progress: " + payloadUpdate.getBytesTransferred() + "/" + payloadUpdate.getTotalBytes());
             // TODO: map to native progress callback ?
         }
     };
@@ -207,7 +194,6 @@ public class NearbyBridge {
         
         @Override
         public void onConnectionInitiated(String endpointId, ConnectionInfo info) {
-            // This is where connection negotation starts on both requesting and requested endpoints
             Log.d(TAG, "Establishing encrypted channel between local endpoint and endpoint[" + endpointId + "]");
             nativeOnConnectionInitiated(endpointId, info.getEndpointName(), info.getAuthenticationDigits(), info.getAuthenticationStatus());
         }
@@ -218,7 +204,6 @@ public class NearbyBridge {
                 Log.d(TAG, "Established connection with endpoint[" + endpointId + "]");
                 nativeOnConnectionEstablished(endpointId);
             } else {
-                // TODO: HANDLE RESOLUTION OF CONNECTION, PERHAPS VERIFICATION ETC.
                 Log.d(TAG, "Failed establishing connection to endpoint[" + endpointId + "]");
                 nativeOnConnectionDisconnected(endpointId);
             }
@@ -226,21 +211,19 @@ public class NearbyBridge {
 
         @Override
         public void onDisconnected(String endpointId) {
+            Log.d(TAG, "Disconnected from endpoint[" + endpointId + "]");
             nativeOnConnectionDisconnected(endpointId);
         }
     };
 
     // ---------------- Utility Functions ----------------
-    
     private static Strategy IntToStrategy(int strategyEnumVal) {
         switch(strategyEnumVal) {
             case 0:
             default:
                 return Strategy.P2P_CLUSTER;
-                
             case 1:
                 return Strategy.P2P_POINT_TO_POINT;
-
             case 2:
                 return Strategy.P2P_STAR;
         }
