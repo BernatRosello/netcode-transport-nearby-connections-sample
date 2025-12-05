@@ -39,7 +39,9 @@ namespace Netcode.Transports.NearbyConnections
 #if !UNITY_EDITOR
             using (var buildVersion = new AndroidJavaClass("android.os.Build$VERSION"))
             {
-                return buildVersion.GetStatic<int>("SDK_INT");
+                int sdk = buildVersion.GetStatic<int>("SDK_INT");
+                internalLogger.Log(kTag, "Android Version SDK_INT: " + sdk);
+                return sdk;
             }
 #else       
             // Default to target for editor and build process purposes
@@ -124,7 +126,7 @@ namespace Netcode.Transports.NearbyConnections
                 new("android.permission.BLUETOOTH_CONNECT",     minSdk: "31", runtimePerm: true),
 
                 // Android 13+ Nearby WiFi
-                new("android.permission.NEARBY_WIFI_DEVICES", minSdk: "32"),
+                new("android.permission.NEARBY_WIFI_DEVICES", minSdk: "32", runtimePerm: true),
 
                 // Optional for file payloads (NO LONGER SUPPORTED API 33+)
                 new("android.permission.READ_EXTERNAL_STORAGE", minSdk: "16", maxSdk: "32", runtimePerm: true)
@@ -711,18 +713,23 @@ namespace Netcode.Transports.NearbyConnections
         {
 #if UNITY_ANDROID //&& !UNITY_EDITOR
             var callbacks = new PermissionCallbacks();
-            callbacks.PermissionDenied += (string _) => { ShowGoToSettingsDialog(); };
-            Permission.RequestUserPermissions(NearbyPermissionDefinitions.Permissions.Select(perm => perm.Name).ToArray(), callbacks);
+            Permission.RequestUserPermissions(NearbyPermissionDefinitions.RuntimePermissions.Select(perm => perm.Name).ToArray(), callbacks);
+            // wait a few seconds just in case before shwoing pop up
+            yield return 3f;
+            callbacks.PermissionDenied += (string _) => { ShowGoToSettingsDialog(_); };
 #endif
             yield return null;
         }
 
 #if UNITY_ANDROID //&& !UNITY_EDITOR
-        public void ShowGoToSettingsDialog()
+        public void ShowGoToSettingsDialog(string permission)
         {
             // Prevent multiple dialogs if something loops
             if (_activeDialog != null)
+            {
+                _activeDialog.GetComponent<PermissionDialogController>().AddDeniedPermissionToDialog(permission);
                 return;
+            }
 
             if (_permissionDialogPrefab == null)
             {
@@ -741,17 +748,20 @@ namespace Netcode.Transports.NearbyConnections
                 return;
             }
 
+            // Add denied permission string
+            controller.AddDeniedPermissionToDialog(permission);
+
             // Hook up button callbacks
             controller.OnOpenSettings = () =>
             {
-                Debug.Log("[Permissions] Opening app settings...");
+                internalLogger.Log(kTag, "[Permissions] Opening app settings...");
                 OpenAppSettings();
                 CloseDialog();
             };
 
             controller.OnCancel = () =>
             {
-                Debug.Log("[Permissions] User canceled permission settings dialog.");
+                internalLogger.Log(kTag, "[Permissions] User canceled permission settings dialog.");
                 CloseDialog();
             };
         }
@@ -785,7 +795,7 @@ namespace Netcode.Transports.NearbyConnections
 
                 currentActivity.Call("startActivity", intent);
             }
-            Debug.Log("[Permissions] Cannot open settings in editor.");
+            internalLogger.Log(kTag, "[Permissions] Cannot open settings in editor.");
         }
 
 #endif

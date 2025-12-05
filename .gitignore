@@ -186,3 +186,5 @@ Assets/NMLBuildCache.meta
 # Bernat Rosello NBC Transport Custom
 .utmp/*
 Assets/Resources/PerformanceTestRun*
+Assets/_Recovery*
+Assets/Settings/Build*Profiles/Android**
