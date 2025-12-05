@@ -253,6 +253,19 @@ namespace Netcode.Transports.NearbyConnections
                 stringDict.Add(Instance.ServerClientId, endpointId);
             }
 
+            public string GetServerId()
+            {
+                if (stringDict.ContainsKey(Instance.ServerClientId))
+                {
+                    return stringDict[Instance.ServerClientId];
+                }
+                else
+                {
+                    Debug.LogError("Couldn't get ServerClientId because endpoint is NOT connected to a server");
+                    return "";
+                }
+            }
+
             IEnumerator IEnumerable.GetEnumerator()
             {
                 return ((IEnumerable)hashDict).GetEnumerator();
@@ -872,7 +885,15 @@ namespace Netcode.Transports.NearbyConnections
 
         public override ulong GetCurrentRtt(ulong transportId) => 0;
 
-        public override void DisconnectLocalClient() { }
+        public override void DisconnectLocalClient()
+        {
+            var sID = _transportIds.GetServerId();
+            if (!String.IsNullOrEmpty(sID))
+            {
+                NBC_Disconnect(sID);
+            }
+        }
+
         public override void DisconnectRemoteClient(ulong transportId)
         {
             if (_transportIds.ContainsKey(transportId))
