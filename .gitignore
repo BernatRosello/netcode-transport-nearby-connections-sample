@@ -183,4 +183,6 @@ Assets/StreamingAssets
 ProjectSettings/EditorBuildSettings.asset
 Assets/NMLBuildCache.meta
 
-.utmp/
+# Bernat Rosello NBC Transport Custom
+.utmp/*
+Assets/Resources/PerformanceTestRun*
