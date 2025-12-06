@@ -39,9 +39,7 @@ namespace Netcode.Transports.NearbyConnections
 #if !UNITY_EDITOR
             using (var buildVersion = new AndroidJavaClass("android.os.Build$VERSION"))
             {
-                int sdk = buildVersion.GetStatic<int>("SDK_INT");
-                internalLogger.Log(kTag, "Android Version SDK_INT: " + sdk);
-                return sdk;
+                return buildVersion.GetStatic<int>("SDK_INT");
             }
 #else       
             // Default to target for editor and build process purposes
@@ -269,7 +267,7 @@ namespace Netcode.Transports.NearbyConnections
                 }
                 else
                 {
-                    Debug.LogError("Couldn't get ServerClientId because endpoint is NOT connected to a server");
+                    internalLogger.LogWarning(kTag, "Couldn't get ServerClientId because endpoint is NOT connected to a server");
                     return "";
                 }
             }
@@ -472,7 +470,7 @@ namespace Netcode.Transports.NearbyConnections
         private static void OnDiscoveryPeerFoundDelegate(string endpointId, string name)
         {
             if (s_instance == null) return;
-            if (s_instance._transportIds.ContainsKey(endpointId))
+            if (s_instance.IsKnownEndpoint(endpointId))
             {
                 internalLogger.LogWarning(kTag, $"Yeah this endpoint[{endpointId}] was already registered, but it's probably a bug so pls look into it. Proceeding to remove endpoint data and RE-Register it...");
                 s_instance.RemoveEndpointData(endpointId);
@@ -491,9 +489,12 @@ namespace Netcode.Transports.NearbyConnections
         private static void OnDiscoveryPeerLostDelegate(string endpointId)
         {
             if (s_instance == null) return;
-            string disconnectedName = s_instance._endpointNames[endpointId];
-            s_instance.OnBrowserLostPeer?.InvokeOnMainThread(endpointId, disconnectedName);
-            s_instance.RemoveEndpointData(endpointId);
+            if (s_instance.IsKnownEndpoint(endpointId))
+            {
+                string disconnectedName = s_instance._endpointNames[endpointId];
+                s_instance.OnBrowserLostPeer?.InvokeOnMainThread(endpointId, disconnectedName);
+                s_instance.RemoveEndpointData(endpointId);
+            }
         }
 
         // This is the point at which an Advertising endpoint (the Server, in P2P_START Strategy) first "sees" the discovering endpoint,
@@ -506,15 +507,13 @@ namespace Netcode.Transports.NearbyConnections
             switch (authStatus)
             {
                 case 0:
-                    s_instance._pendingAuthCodes.Add(endpointId, authDigits);
-
                     // As advertisers we only get to see the peer upon them requesting a connections, so this is where we register their info
                     if (s_instance._isAdvertising)
                     {
-                        if (s_instance._transportIds.ContainsKey(endpointId))
+                        if (s_instance.IsKnownEndpoint(endpointId))
                         {
                             // The Advertiser, however, shouldn't know of the client up until this point.
-                            connectionLogger.LogError(NBCTransport.kTag, $"ADVERTISER: Reported peer found for already known peer {endpointId} (after completing connection initiation).");
+                            connectionLogger.LogWarning(NBCTransport.kTag, $"ADVERTISER: Reported peer found for already known peer {endpointId} (after completing connection initiation).");
                             return;
                         }
                         s_instance.EndpointNames.Add(endpointId, name);
@@ -525,16 +524,19 @@ namespace Netcode.Transports.NearbyConnections
                     }
                     else if (s_instance._isBrowsing)
                     {
-                        if (!s_instance._transportIds.ContainsKey(endpointId))
+                        if (!s_instance.IsKnownEndpoint(endpointId))
                         {
                             // means the peer disconnected before we could complete the location process locally.
                             // We must halt any connection attempt/communication at the browser (LOST PEER).
-                            connectionLogger.LogError(NBCTransport.kTag, $"BROWSER: Lost connection with peer {endpointId} before completing connection initiation.");
+                            connectionLogger.LogWarning(NBCTransport.kTag, $"BROWSER: Lost connection with peer {endpointId} before completing connection initiation.");
+                            // To avoid perpetuating unwanted connection in the underlying API we send a connection rejection request just in case
+                            NBC_RejectConnection(endpointId);
                             return;
                         }
                         s_instance._endpointStatuses[endpointId] = EndpointStatus.REQUESTED;
                         s_instance.OnBrowserSentConnectionRequest?.InvokeOnMainThread(endpointId, name);
                     }
+                    s_instance._pendingAuthCodes[endpointId] = authDigits;
 
                     if (s_instance.AutoApproveConnectionRequest)
                     {
@@ -543,16 +545,26 @@ namespace Netcode.Transports.NearbyConnections
                     break;
 
                 default:
-                    if (!s_instance._pendingAuthCodes.Remove(endpointId))
+                    if (s_instance._pendingAuthCodes.ContainsKey(endpointId))
                         connectionLogger.LogWarning(NBCTransport.kTag, "Couldn't find auth code for endpoint[" + endpointId + "]");
                     break;
             }
 
             //connectionLogger.Log(NBCTransport.kTag, "Name: " + s_instance._endpointNames[endpointId] + " EndpointId:" + endpointId + " Status: " + s_instance._endpointStatuses[endpointId]);
-            connectionLogger.Log(NBCTransport.kTag, (s_instance._transportIds.ContainsKey(endpointId) ? "Registered" : "UNREGISTERED[!]") +
+            connectionLogger.Log(NBCTransport.kTag, (s_instance.IsKnownEndpoint(endpointId) ? "Registered" : "UNREGISTERED[!]") +
                 $"EndpointId: {endpointId} Name: {name} AuthDigits: {authDigits} AuthStatus: {authStatus}");
 
             s_instance.OnConnectingWithPeer?.InvokeOnMainThread(endpointId);
+        }
+
+        private bool IsKnownEndpoint(string endpointId)
+        {
+            return _transportIds.ContainsKey(endpointId);
+        }
+
+        private bool IsConnectedTransportClient(ulong transportId)
+        {
+            return _transportIds.ContainsKey(transportId);
         }
 
         // Unity Transport Actions
@@ -561,11 +573,15 @@ namespace Netcode.Transports.NearbyConnections
         private static void OnConnectionEstablishedDelegate(string endpointId)
         {
             if (s_instance == null) return;
-            if (!s_instance._transportIds.ContainsKey(endpointId))
+            if (!s_instance.IsKnownEndpoint(endpointId))
+            {
                 // means the peer disconnected before we could complete the location process locally.
                 // We must halt any connection attempt/communication.
+                NBC_Disconnect(endpointId);
                 return;
+            }
 
+            s_instance._pendingAuthCodes.Remove(endpointId);
             s_instance._endpointStatuses[endpointId] = EndpointStatus.CONNECTED;
             s_instance.MainThreadInvokeOnTransportEvent(NetworkEvent.Connect, s_instance._transportIds[endpointId], default);
             connectionLogger.Log(NBCTransport.kTag, $"Established connection to endpoint {endpointId} with name {s_instance.EndpointNames[endpointId]} and transportId: {s_instance._transportIds[endpointId]}");
@@ -577,7 +593,7 @@ namespace Netcode.Transports.NearbyConnections
             internalLogger.Log(kTag, $"Called OnConnectionDisconnectedDelegate on endpoint[{endpointId}]");
             if (s_instance == null) return;
 
-            if (s_instance._transportIds.ContainsKey(endpointId))
+            if (s_instance.IsKnownEndpoint(endpointId))
             {
                 connectionLogger.Log(NBCTransport.kTag, $"Disconnecting from endpoint {endpointId} with name {s_instance.EndpointNames[endpointId]} and transportId: {s_instance._transportIds[endpointId]} and status: {s_instance._endpointStatuses[endpointId]}");
                 if (s_instance._endpointStatuses[endpointId] == EndpointStatus.CONNECTED)
@@ -586,6 +602,8 @@ namespace Netcode.Transports.NearbyConnections
                         s_instance._transportIds[endpointId], default);
                 }
                 s_instance.RemoveEndpointData(endpointId);
+
+                s_instance.OnPeerDisconnected?.InvokeOnMainThread(endpointId);
             }
         }
 
@@ -593,7 +611,7 @@ namespace Netcode.Transports.NearbyConnections
         private static void OnPayloadReceivedDelegate(string endpointId, IntPtr dataPtr, int len)
         {
             if (s_instance == null) return;
-            if (s_instance._transportIds.ContainsKey(endpointId))
+            if (s_instance.IsKnownEndpoint(endpointId))
             {
                 byte[] data = new byte[len];
                 Marshal.Copy(dataPtr, data, 0, len);
@@ -827,7 +845,9 @@ namespace Netcode.Transports.NearbyConnections
         {
             if (_isAdvertising)
             {
+                // This function call might be unnsecessary (it might be desried behaviour to keep partial connections, requests etc, around...)
                 s_instance.RemoveUnconnectedEndpointData();
+                
                 NBC_StopAdvertising();
                 _isAdvertising = false;
             }
@@ -848,7 +868,9 @@ namespace Netcode.Transports.NearbyConnections
         {
             if (_isBrowsing)
             {
+                // This function call might be unnsecessary (it might be desried behaviour to keep partial connections, requests etc, around...)
                 s_instance.RemoveUnconnectedEndpointData();
+
                 NBC_StopDiscovery();
                 _isBrowsing = false;
                 _endpointNames.Clear();
@@ -857,20 +879,36 @@ namespace Netcode.Transports.NearbyConnections
 
         public void SendConnectionRequest(string endpointId)
         {
-            // For Nearby, just initiate connection
-            connectionLogger.Log(NBCTransport.kTag, $"[NBC] Sent connection request to {endpointId}");
-            NBC_RequestConnection(Nickname, endpointId);
-            _endpointStatuses[endpointId] = EndpointStatus.REQUESTED;
+            if (_isBrowsing && IsKnownEndpoint(endpointId) && s_instance._endpointStatuses[endpointId] == EndpointStatus.ADVERTISING)
+            {
+                connectionLogger.Log(NBCTransport.kTag, $"[NBC] Sent connection request to {endpointId}");
+                NBC_RequestConnection(Nickname, endpointId);
+                _endpointStatuses[endpointId] = EndpointStatus.REQUESTED;
+            }
         }
 
         public void ApproveConnectionRequest(string endpointId)
         {
-            if (s_instance.IsAdvertising)
-                s_instance.OnAdvertiserApprovedConnectionRequest?.Invoke(endpointId);
-
-            if (s_instance.IsBrowsing)
-                s_instance.OnBrowserApprovedConnectionRequest?.Invoke(endpointId);
-            NBC_AcceptConnection(endpointId);
+            if (s_instance.IsKnownEndpoint(endpointId)) 
+            {
+                if (s_instance.IsAdvertising && s_instance._endpointStatuses[endpointId] == EndpointStatus.REQUESTING)
+                {
+                    s_instance.OnAdvertiserApprovedConnectionRequest?.InvokeOnMainThread(endpointId);
+                    NBC_AcceptConnection(endpointId); 
+                }
+                else if (s_instance.IsBrowsing && s_instance._endpointStatuses[endpointId] == EndpointStatus.REQUESTED)
+                {
+                    s_instance.OnBrowserApprovedConnectionRequest?.InvokeOnMainThread(endpointId);
+                    NBC_AcceptConnection(endpointId); 
+                } else
+                {
+                    internalLogger.LogWarning(kTag, "Tried to approve a connection request of a known endpoint that was in invalid pre-approval state: " + s_instance._endpointStatuses[endpointId]);
+                }
+            }
+            else
+            {
+                internalLogger.LogWarning(kTag, "Tried to approve a connection request to an un-registered endpoint (UNDEFINED BEHAVIOUR). Ignoring Approval attempt!");
+            }
         }
 
         // -------------------------------------------------------------------------------------
@@ -888,7 +926,7 @@ namespace Netcode.Transports.NearbyConnections
 
         public override void Send(ulong transportId, ArraySegment<byte> data, NetworkDelivery delivery)
         {
-            if (_transportIds.ContainsKey(transportId))
+            if (IsConnectedTransportClient(transportId))
             {
                 messageLogger.Log(NBCTransport.kTag, "Sending " + data.Count + "bytes to " + _transportIds[transportId] + " with transportId: " + transportId);
                 NBC_SendBytes(_transportIds[transportId], data.Array, data.Count);
@@ -912,7 +950,7 @@ namespace Netcode.Transports.NearbyConnections
 
         public override void DisconnectRemoteClient(ulong transportId)
         {
-            if (_transportIds.ContainsKey(transportId))
+            if (IsConnectedTransportClient(transportId))
             {
                 var epId = _transportIds[transportId];
                 //if (_endpointStatuses[epId] != EndpointStatus.CONNECTED)
@@ -1003,7 +1041,9 @@ namespace Netcode.Transports.NearbyConnections
         /// </summary>
         public event Action<string> OnConnectingWithPeer;
 
-        //TODO: Define what this action exactly means
+        /// <summary>
+        /// Invoked when a connection to a peer is lost (regardless of <see cref="EndpointStatus"/>). 
+        /// </summary>
         public event Action<string> OnPeerDisconnected;
     }
 }

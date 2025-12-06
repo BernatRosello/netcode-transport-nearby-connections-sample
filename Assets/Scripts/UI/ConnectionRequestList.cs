@@ -7,6 +7,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using Netcode.Transports.NearbyConnections;
 using Unity.Netcode;
+using UnityEngine.PlayerLoop;
 
 public class ConnectionRequestList : MonoBehaviour
 {
@@ -27,8 +28,17 @@ public class ConnectionRequestList : MonoBehaviour
 
         _nbcTransport.OnBrowserLostPeer += (string _, string _) => UpdateConnectionRequestList();
         _nbcTransport.OnAdvertiserReceivedConnectionRequest += (string _, string _) => UpdateConnectionRequestList();
+        _nbcTransport.OnAdvertiserApprovedConnectionRequest += (string _) => UpdateConnectionRequestList();
         NetworkManager.Singleton.OnClientConnectedCallback += (ulong _) => UpdateConnectionRequestList();
+        _nbcTransport.OnConnectingWithPeer += (string _) => UpdateConnectionRequestList();
+        _nbcTransport.OnPeerDisconnected += (string _) => UpdateConnectionRequestList();
         UpdateConnectionRequestList();
+    }
+
+    private void OnEnable()
+    {
+        if (_nbcTransport != null)
+            UpdateConnectionRequestList();
     }
 
     private void UpdateConnectionRequestList()

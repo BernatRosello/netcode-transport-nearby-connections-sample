@@ -75,7 +75,7 @@ public class RttCounter : NetworkBehaviour
     private void Update()
     {
         // Only clients measure RTT to host
-        if (!IsClient || !IsSpawned || IsHost) return;
+        if (!IsClient || !IsSpawned) return;
 
         // Send one RTT batch per ~0.5s “network tick”
         _tickTimer += Time.deltaTime;

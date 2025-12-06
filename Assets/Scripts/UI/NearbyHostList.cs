@@ -15,7 +15,7 @@ public class NearbyHostList : MonoBehaviour
 
     [SerializeField] private RectTransform _root;
 
-    private NBCTransport _nbcTransport;
+    private NBCTransport _nbcTransport = null;
 
     public List<EndpointGUISlot> NearbyHostSlotList => _nearbyHostSlotList;
 
@@ -29,11 +29,18 @@ public class NearbyHostList : MonoBehaviour
         _nbcTransport.OnBrowserFoundPeer += (string _,string _) => UpdateNearbyHostList() ;
         _nbcTransport.OnBrowserLostPeer +=  (string _, string _) => UpdateNearbyHostList() ;
         _nbcTransport.OnBrowserSentConnectionRequest += (string _, string _) => UpdateNearbyHostList();
+        _nbcTransport.OnPeerDisconnected += (string _) => UpdateNearbyHostList();
         NetworkManager.Singleton.OnClientConnectedCallback += (ulong _) => UpdateNearbyHostList();
         NetworkManager.Singleton.OnClientDisconnectCallback += (ulong _) => UpdateNearbyHostList();
         UpdateNearbyHostList();
     }
 
+    private void OnEnable()
+    {
+        if (_nbcTransport != null)
+            UpdateNearbyHostList();
+    }
+    
     private void UpdateNearbyHostList()
     {
         // We destroy and instantiate every connection request slot in every frame.
