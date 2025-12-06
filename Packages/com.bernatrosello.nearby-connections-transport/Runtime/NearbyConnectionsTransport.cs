@@ -93,7 +93,7 @@ namespace Netcode.Transports.NearbyConnections
 
             public bool IsRuntimePermission(int sdk)
             {
-                if (sdk >= 23 && RuntimePermission && AppliesTo(sdk))
+                if (RuntimePermission && AppliesTo(sdk))
                 {
                     return true;
                 }
@@ -132,9 +132,15 @@ namespace Netcode.Transports.NearbyConnections
                 new("android.permission.READ_EXTERNAL_STORAGE", minSdk: "16", maxSdk: "32", runtimePerm: true)
             };
             /// <summary>
-            /// Gets all the permissions necessary to run on the current device's SDK level (if in editor defaults to targetSdk).
+            /// Gets all the permissions registered, regardless of target sdk version or deployed sdk level.
+            /// RECOMMENDED for use IN EDTIOR.
             /// </summary>
-            public static PermissionDef[] Permissions => _permissions.Where(perm => perm.AppliesTo(AndroidVersion())).ToArray();
+            public static PermissionDef[] Permissions => _permissions.ToArray();
+            /// <summary>
+            /// Gets all the permissions necessary to run on the current device's SDK level (if in editor defaults to targetSdk).
+            /// WARNING: Don't depend on these permissions UNLESS the code is EXCLUSIVELY running ON DEVICE (true sdk level will be used)
+            /// </summary>
+            public static PermissionDef[] ActivePermissions => _permissions.Where(perm => perm.AppliesTo(AndroidVersion())).ToArray();
             /// <summary>
             /// Gets the RUNTIME permissions necessary to run on the current device's SDK level (if in editor defaults to targetSdk).
             /// </summary>
@@ -342,7 +348,7 @@ namespace Netcode.Transports.NearbyConnections
             get
             {
 #if UNITY_ANDROID //&& !UNITY_EDITOR
-                foreach (var perm in NearbyPermissionDefinitions.Permissions)
+                foreach (var perm in NearbyPermissionDefinitions.ActivePermissions)
                 {
                     if (!AndroidPermissionCheck.HasPermission(perm.Name))
                     {
