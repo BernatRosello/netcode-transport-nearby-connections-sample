@@ -1,6 +1,5 @@
-// Source - https://stackoverflow.com/questions/43293173/use-custom-manifest-file-and-permission-in-unity/54894488#54894488
-// Posted by pale bone, modified by community. See post 'Timeline' for change history
-// Retrieved 2025-11-27, License - CC BY-SA 4.0
+// Original Source - https://stackoverflow.com/a/54894488
+// Posted by pale bone, extended by https://github.com/BernatRosello/
 
 using System.IO;
 using System.Text;
@@ -8,6 +7,7 @@ using System.Xml;
 using UnityEditor.Android;
 using Netcode.Transports.NearbyConnections;
 
+#if UNITY_ANDROID && UNITY_EDITOR
 public class ModifyUnityAndroidAppManifestSample : IPostGenerateGradleAndroidProject
 {
 
@@ -167,3 +167,5 @@ internal class AndroidManifest : AndroidXmlDocument
         }
     }
 }
+
+#endif //UNITY_ANDROID && UNITY_ENGINE
