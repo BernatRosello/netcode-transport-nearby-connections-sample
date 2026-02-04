@@ -8,16 +8,26 @@
     "com.unity.netcode.gameobjects": "2.7.0",
     "com.google.external-dependency-manager": "1.2.186"
   },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/BernatRosello/Unity-NearbyConnections-Transport.git"
+  },
   "keywords": [
     "netcode",
     "transport",
     "networking",
+    "multiplayer",
+    "mobile",
     "android"
   ],
   "author": {
     "name": "Bernat Roselló Muñoz",
     "email": "bernatrosello@gmail.com",
-    "url": "PLACEHOLDER_URL"
+    "url": "https://github.com/BernatRosello"
   },
-  "hideInEditor": false
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/BernatRosello/Unity-NearbyConnections-Transport/issues"
+  },
+  "homepage": "https://github.com/BernatRosello/Unity-NearbyConnections-Transport#readme"
 }
