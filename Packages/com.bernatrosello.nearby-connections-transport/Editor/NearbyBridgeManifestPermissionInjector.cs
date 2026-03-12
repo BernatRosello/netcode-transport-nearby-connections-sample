@@ -1,4 +1,4 @@
-// Source - https://stackoverflow.com/a
+// Source - https://stackoverflow.com/questions/43293173/use-custom-manifest-file-and-permission-in-unity/54894488#54894488
 // Posted by pale bone, modified by community. See post 'Timeline' for change history
 // Retrieved 2025-11-27, License - CC BY-SA 4.0
 
